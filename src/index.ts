@@ -1,14 +1,20 @@
+/** dsh-upload-ux host 入口：挂载 upload Typert Remote 服务。 */
+
 import type { Context } from '@deepseek-ai/cordis'
+import type { Config } from './config.ts'
+import { UploadService } from './remote.ts'
+
+export { Config } from './config.ts'
 
 export const name = 'dsh-upload-ux'
 
-/**
- * 依赖的服务：全部就绪后 apply 才会执行（Cordis 注入）。
- * 上传体验的主体在浏览器侧（client/）；host 侧按需提供
- * 文件落盘 / Typert Remote 等服务（实现阶段补充）。
- */
-export const inject: string[] = []
+/** 依赖服务就绪后 apply 才执行。 */
+export const inject = ['sessionPersistence']
 
-export function apply(ctx: Context) {
-  ctx.logger.info('[dsh-upload-ux] host side loaded')
+export function apply(ctx: Context, config: Config) {
+  ctx.logger.info(
+    '[dsh-upload-ux] host loaded, limits={ maxFileBytes: %d, maxFilesPerBatch: %d, maxBatchBytes: %d, dirName: %s }',
+    config.maxFileBytes, config.maxFilesPerBatch, config.maxBatchBytes, config.dirName,
+  )
+  ctx.plugin(UploadService, config)
 }

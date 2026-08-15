@@ -1,5 +1,16 @@
-import { build } from 'esbuild'
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
+import { createRequire } from 'node:module'
+
+// esbuild 解析：本地 junction 优先，缺失时用 deepseek-harness 源码树的版本兜底。
+const require = createRequire(import.meta.url)
+const REPO_ESBUILD = 'C:/Users/19404/hermes-workspace/deepseek-harness/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild'
+
+let build
+try {
+  ;({ build } = await import('esbuild'))
+} catch {
+  ;({ build } = require(REPO_ESBUILD))
+}
 
 const id = 'dsh-upload-ux'
 const barePath = 'dist/client.bare.js'
@@ -13,8 +24,7 @@ await build({
   jsx: 'automatic',
   target: ['es2022'],
   outfile: barePath,
-  // The shell's module loader provides these at runtime (same ids the
-  // shipped client plugins require); everything else is bundled.
+  // 运行时由 shell 的模块加载器提供；zod 内联进 bundle。
   external: ['react', 'react/*', '@deepseek-ai/*', 'scheduler'],
   legalComments: 'none',
   logLevel: 'info',

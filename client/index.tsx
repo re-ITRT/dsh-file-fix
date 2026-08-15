@@ -1,16 +1,67 @@
-/**
- * dsh-upload-ux 的浏览器半。
- *
- * TODO(实现阶段，思路已验证于 dsh-vision-tool 的 installFileDrop)：
- *  - 非图片文件 drop / 粘贴（Ctrl+V）→ 落盘会话工作区 attachments/ + 引用文本注入输入框
- *  - 修复 DSH 原生「拖入图片」drag overlay 卡住（处理后派发合成 dragend 复位）
- *  - 压掉纯非图片 drop 的「仅支持 PNG、JPG、WebP、GIF」误提示
- *  - 可选：点击选择文件、上传进度、大小限制、文件列表
- */
+/** dsh-upload-ux 浏览器半：挂载 upload Remote、拦截 drop/paste、注册 rail + 选择按钮。 */
+
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+// 类型合并：conversation.composer.dock / conversation.input.left 两个 slot 键。
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { UploadLimits } from '../src/types.ts'
+import { UPLOAD_TYPERT_REMOTE } from './remote.ts'
+import { createUploadStore } from './store.ts'
+import { UploadPickerButton } from './UploadPickerButton.tsx'
+import { UploadRail } from './UploadRail.tsx'
 
 export const name = 'dsh-upload-ux'
 
-export function apply(ctx: ClientContext) {
-  ctx.logger.info('[dsh-upload-ux] client loaded')
+/** 依赖：slot 注册表 + 客户端 Remote 网关。 */
+export const inject = ['slots', 'remote']
+
+export async function apply(ctx: ClientContext): Promise<void> {
+  await ctx.remote.$mount(UPLOAD_TYPERT_REMOTE)
+
+  // 限制：启动时拉一次，失败时保持 null（预检跳过，由 host 端拒绝兜底）。
+  const limitsBox: { value: UploadLimits | null } = { value: null }
+  void ctx.remote.upload.limits().then(result => {
+    if (result.ok) {
+      limitsBox.value = result.value
+      ctx.logger.info(
+        '[dsh-upload-ux] limits loaded: maxFileBytes=%d maxFilesPerBatch=%d maxBatchBytes=%d',
+        result.value.maxFileBytes, result.value.maxFilesPerBatch, result.value.maxBatchBytes,
+      )
+    } else {
+      ctx.logger.warn('[dsh-upload-ux] limits unavailable: %o', result.error)
+    }
+  }).catch(error => {
+    ctx.logger.warn('[dsh-upload-ux] limits fetch failed: %o', error)
+  })
+
+  // 两个注册共享同一个 store handle（同 scope 同一实例），共享 inject 面。
+  const store = createUploadStore()
+  const share = {
+    upload: ctx.remote.upload,
+    getLimits: () => limitsBox.value,
+    logger: ctx.logger,
+  }
+
+  ctx.slots.inject('conversation.composer.dock', () => {
+    const dispose = ctx.slots.register({
+      name: 'conversation.composer.dock',
+      id: 'upload-rail',
+      order: 1,
+      store,
+      inject: () => share,
+    }, UploadRail)
+    return () => { dispose() }
+  })
+
+  ctx.slots.inject('conversation.input.left', () => {
+    const dispose = ctx.slots.register({
+      name: 'conversation.input.left',
+      id: 'upload-picker',
+      order: 0,
+      store,
+      inject: () => share,
+    }, UploadPickerButton)
+    return () => { dispose() }
+  })
+
+  ctx.logger.info('[dsh-upload-ux] client loaded: intercept + rail + picker registered')
 }

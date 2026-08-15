@@ -9,6 +9,8 @@
     "rootDir": "src",
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "types": ["node"]
   },
   "include": ["src"]

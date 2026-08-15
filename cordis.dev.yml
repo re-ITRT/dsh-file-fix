@@ -1,0 +1,5 @@
+# 开发模式 patch：以包名插入组合（profile 的 node_modules 里有指向本项目的 junction）。
+# 前提：node scripts/mk-junction.cjs "<profile>/node_modules/dsh-upload-ux" "<本项目路径>"
+- insert:
+    - id: upload
+      name: 'dsh-upload-ux'
