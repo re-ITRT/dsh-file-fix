@@ -53,6 +53,11 @@ export async function removeFileBytes(
   const root = resolve(cwd, dirName)
   const target = resolve(cwd, relPath)
   if (target !== root && !target.startsWith(root + sep)) return false
-  await unlink(target)
-  return true
+  try {
+    await unlink(target)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
 }
