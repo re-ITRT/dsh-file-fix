@@ -15,8 +15,10 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
 
 ## 方案
 
-- 任何文件 drop / 粘贴 / 📎 选择 → 字节上传（`upload/persistFile`）→ host 落盘会话工作区
-  `attachments/`（重名自动 `-1` 后缀）→ 引用文本注入输入框（`@file:attachments/x（1.2 MB）`）
+- 任何文件 drop / 粘贴 / 📎 选择 → 字节上传（`uploadux/persistFile`）→ host 落盘会话工作区
+  `attachments/`（重名自动 `-1` 后缀）→ 引用文本注入输入框（**绝对路径** + 大小，如
+  `@file:C:/Users/x/workspace/attachments/a.zip（1.2 MB）`——agent 无需猜基准目录，
+  str_replace_editor/fs 工具直接可读）
 - 图片同权（不保留官方链路）：作为带缩略图的普通文件落盘；agent 需要看图时用 DSH 自带
   `read_image` 工具（要求当前模型声明 image input）
 - 交互照 Hermes：统一 rail 混排（缩略图降采样队列）、chip 三态（上传中/完成/失败点击重试）、
