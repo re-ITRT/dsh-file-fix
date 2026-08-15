@@ -1,4 +1,4 @@
-/** upload 命名空间的 Typert Remote 服务：persistFile / limits / remove。 */
+/** uploadux 命名空间的 Typert Remote 服务：persistFile / limits / remove。 */
 
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -29,7 +29,7 @@ export class UploadService extends TypertRemoteService {
     ctx: Context,
     readonly config: Config,
   ) {
-    super(ctx, 'upload')
+    super(ctx, 'uploadux')
   }
 
   @Remote('limits')
@@ -89,8 +89,8 @@ export class UploadService extends TypertRemoteService {
     }
   }
 
-  @Remote('remove')
-  async remove(request: RemoveFileRequest): Promise<RemoveFileOutcome> {
+  @Remote('removeFile')
+  async removeFile(request: RemoveFileRequest): Promise<RemoveFileOutcome> {
     let cwd: string | undefined
     try {
       cwd = await workspaceOf(this.ctx.sessionPersistence, request.sessionId)

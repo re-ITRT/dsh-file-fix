@@ -1,4 +1,4 @@
-/** 统一上传 rail：composer 下方，图片与文件混排，三态 chip + 删除。 */
+/** 统一上传 rail：输入栏上方（hero 与 docked 两种态都渲染），图片与文件混排，三态 chip + 删除。 */
 
 import { useEffect, useRef } from 'react'
 import type { UploadLimits } from '../src/types.ts'
@@ -68,7 +68,7 @@ export function UploadRail(props: UploadRailProps): JSX.Element | null {
     actions.removeItem(item.id)
     logger.info('[dsh-upload-ux] chip removed %s -> remote %s', item.name, item.relPath ?? '(not uploaded)')
     if (item.relPath !== undefined) {
-      void upload.remove({ sessionId, relPath: item.relPath }).then(result => {
+      void upload.removeFile({ sessionId, relPath: item.relPath }).then(result => {
         if (!result.ok) logger.warn('[dsh-upload-ux] remote remove failed %s: %o', item.relPath, result.error)
       })
     }
