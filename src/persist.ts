@@ -29,19 +29,20 @@ export async function uniqueName(dir: string, name: string): Promise<string> {
   }
 }
 
-/** 把 base64 数据写入 `<cwd>/<dirName>/<uniqueName>`，返回相对路径。 */
+/** 把 base64 数据写入 `<cwd>/<dirName>/<uniqueName>`，返回相对+绝对路径。 */
 export async function persistFileBytes(
   cwd: string,
   dirName: string,
   name: string,
   data: string,
-): Promise<{ relPath: string; size: number }> {
+): Promise<{ relPath: string; absPath: string; size: number }> {
   const bytes = Buffer.from(data, 'base64')
   const dir = join(cwd, dirName)
   await mkdir(dir, { recursive: true })
   const unique = await uniqueName(dir, sanitizeName(name))
-  await writeFile(join(dir, unique), bytes)
-  return { relPath: `${dirName}/${unique}`, size: bytes.byteLength }
+  const absPath = join(dir, unique)
+  await writeFile(absPath, bytes)
+  return { relPath: `${dirName}/${unique}`, absPath, size: bytes.byteLength }
 }
 
 /** 删除工作区内文件。relPath 必须保持在 `<cwd>/<dirName>` 内（防路径逃逸）。 */

@@ -22,7 +22,7 @@ const persistFileRequest$schema = z.object({
 }).readonly()
 
 const persistFileOutcome$schema = z.union([
-  z.object({ ok: z.literal(true), relPath: z.string(), size: z.number() }).readonly(),
+  z.object({ ok: z.literal(true), relPath: z.string(), absPath: z.string(), size: z.number() }).readonly(),
   z.object({ ok: z.literal(false), code: z.string(), detail: z.string().optional() }).readonly(),
 ]).readonly()
 

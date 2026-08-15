@@ -74,14 +74,14 @@ export async function uploadOne(
       deps.logger.warn('[dsh-upload-ux] upload failed %s: %s', item.name, outcome.code)
       return
     }
-    const { relPath, size } = outcome
+    const { relPath, absPath, size } = outcome
     deps.actions.markDone(item.id, relPath, size)
     deps.logger.info(
       '[dsh-upload-ux] upload ok %s -> %s %dms via=%s',
       item.name, relPath, Date.now() - started, via,
     )
-    // 引用注入：上传完成即写入草稿末尾。
-    const refText = `@file:${relPath}（${humanSize(size)}）`
+    // 引用注入：绝对路径（agent 无需猜测基准目录，直接可读）+ 大小。
+    const refText = `@file:${absPath.replaceAll('\\', '/')}（${humanSize(size)}）`
     const draft = deps.getDraft()
     deps.setDraft(draft === '' ? refText : `${draft}\n${refText}`)
     deps.logger.info('[dsh-upload-ux] ref injected: %s', refText)

@@ -22,9 +22,9 @@ export interface PersistFileRequest {
   data: string
 }
 
-/** persistFile 的业务结果：成功带相对路径，失败带稳定 code。 */
+/** persistFile 的业务结果：成功带相对+绝对路径（引用注入用绝对路径，agent 免猜基准目录），失败带稳定 code。 */
 export type PersistFileOutcome =
-  | { ok: true; relPath: string; size: number }
+  | { ok: true; relPath: string; absPath: string; size: number }
   | { ok: false; code: PersistFailureCode; detail?: string }
 
 export type PersistFailureCode =
