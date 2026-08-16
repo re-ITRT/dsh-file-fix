@@ -218,7 +218,7 @@ async function mirrorToWorkspace(
       await mkdir(mirrorDir, { recursive: true })
       await writeFile(mirrorPath, found.bytes)
     }
-    return `\n[大文件] 完整内容已镜像到工作区 ".dsh-uploadux/reads/${found.row.name}"（${found.bytes.byteLength} 字节），需要全量内容时用 read 工具读取该文件。`
+    return `\n[大文件] 完整内容已镜像到工作区 ".dsh-uploadux/reads/${found.row.name}"（${found.bytes.byteLength} 字节）。读取建议：优先用 read_attachment 按 offset 分段读取（每段约 48 KB，返回的 banner 会给出下一个 offset）；str_replace_editor view 单次输出上限仅 16000 字符，读大文件效率低。`
   } catch {
     return ''
   }
