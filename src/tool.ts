@@ -33,13 +33,23 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
       'Read the content of a file the user uploaded through dsh-upload-ux.',
       'The file lives in the attachment store (independent of the workspace filesystem);',
       'look up its attachment_id from the system message that lists uploaded files.',
-      'Text-like content is returned as text (capped); binary content returns size and media type only.',
+      'Text-like content is returned as text; binary content returns size and media type only.',
+      'Large files are truncated to one read: pass offset (byte position) to continue,',
+      'repeatedly until the returned "more" flag is false.',
     ].join(' '),
     parameters: {
       attachment_id: {
         type: 'string',
         required: true,
         description: 'The content-addressed id of the uploaded file (from the system file list).',
+      },
+      offset: {
+        type: 'integer',
+        description: 'Byte offset to start reading from (default 0). Use with "more" to page through large files.',
+      },
+      limit: {
+        type: 'integer',
+        description: 'Maximum bytes to read in this call (default and hard cap: the configured max).',
       },
     },
     output: {
@@ -50,13 +60,18 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
           name: { type: 'string', required: true },
           mediaType: { type: 'string', required: true },
           size: { type: 'integer', required: true },
+          offset: { type: 'integer', required: true },
+          more: { type: 'boolean', required: true },
           text: { type: 'string' },
           binary: { type: 'boolean' },
         },
       },
-      render: (_args, value: { name: string; mediaType: string; size: number; text?: string; binary?: boolean }) => {
+      render: (_args, value: { name: string; mediaType: string; size: number; offset: number; more: boolean; text?: string; binary?: boolean }) => {
         if (value.text !== undefined) {
-          return [{ type: 'text', text: value.text }]
+          const banner = value.more
+            ? `[${value.name} 分段 ${value.offset}-${value.offset + value.text.length}/${value.size} 字节，继续用 offset=${value.offset + value.text.length} 读取]`
+            : `[${value.name} ${value.size} 字节，读取完毕]`
+          return [{ type: 'text', text: `${banner}\n${value.text}` }]
         }
         return [{
           type: 'text',
@@ -77,18 +92,25 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
           name: found.row.name,
           mediaType: found.row.mediaType,
           size: found.bytes.byteLength,
+          offset: 0,
+          more: false,
           binary: true,
         }
       }
-      const slice = found.bytes.subarray(0, config.maxReadBytes)
-      const text = slice.toString('utf8')
+      const offset = Math.max(0, Math.floor(Number(args.offset) || 0))
+      const requested = Math.floor(Number(args.limit))
+      const limit = Number.isFinite(requested) && requested > 0
+        ? Math.min(requested, config.maxReadBytes)
+        : config.maxReadBytes
+      const slice = found.bytes.subarray(offset, offset + limit)
+      const more = offset + slice.byteLength < found.bytes.byteLength
       return {
         name: found.row.name,
         mediaType: found.row.mediaType,
         size: found.bytes.byteLength,
-        text: slice.byteLength < found.bytes.byteLength
-          ? `${text}\n…（内容超过 ${config.maxReadBytes} 字节，已截断）`
-          : text,
+        offset,
+        more,
+        text: slice.toString('utf8'),
       }
     },
   }))
