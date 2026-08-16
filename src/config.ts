@@ -13,6 +13,12 @@ export interface Config {
   readChunkBytes: number
   /** read_attachment 单次读取的硬上限（默认 128 KB；超过 spill 阈值的显式 limit 会被平台截断）。 */
   maxReadBytes: number
+  /**
+   * 完整文件超过该字节数时，read_attachment 把完整内容镜像到工作区
+   * `.dsh-uploadux/reads/` 并在结果里给出路径（模型可用官方 read 工具读全量，
+   * 官方 read 在 spill-policy 中豁免）。默认 50 KB；设 0 关闭镜像。
+   */
+  readMirrorThreshold: number
 }
 
 export const Config: s<Config> = s.object({
@@ -21,4 +27,5 @@ export const Config: s<Config> = s.object({
   maxBatchBytes: s.number().step(1).min(1).default(200 * 1024 * 1024),
   readChunkBytes: s.number().step(1).min(1).default(48 * 1024),
   maxReadBytes: s.number().step(1).min(1).default(128 * 1024),
+  readMirrorThreshold: s.number().step(1).min(0).default(50 * 1024),
 })

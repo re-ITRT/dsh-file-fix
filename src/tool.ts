@@ -4,10 +4,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { canonicalPath } from '@deepseek-ai/dsh-sandbox'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, resolve, sep } from 'node:path'
+import { dirname, relative, resolve, sep } from 'node:path'
 import { existsSync as existsSyncSync } from 'node:fs'
 import type { Config } from './config.ts'
 import type { FileAttachmentStore } from './store.ts'
+import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 
 /** UTF-8 可解码且无过多控制字符才当文本返回。 */
 function looksTextual(bytes: Buffer): boolean {
@@ -104,13 +105,18 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
         : config.readChunkBytes
       const slice = found.bytes.subarray(offset, offset + limit)
       const more = offset + slice.byteLength < found.bytes.byteLength
+      // 大文件镜像：完整内容写入工作区 .dsh-uploadux/reads/，模型可用官方 read 工具读全量。
+      let mirrorNote = ''
+      if (config.readMirrorThreshold > 0 && found.bytes.byteLength > config.readMirrorThreshold) {
+        mirrorNote = await mirrorToWorkspace(exec, found)
+      }
       return {
         name: found.row.name,
         mediaType: found.row.mediaType,
         size: found.bytes.byteLength,
         offset,
         more,
-        text: slice.toString('utf8'),
+        text: slice.toString('utf8') + mirrorNote,
       }
     },
   }))
@@ -196,4 +202,24 @@ export function registerPlaceAttachmentTool(ctx: Context, store: FileAttachmentS
       }
     },
   }))
+}
+
+/** 大文件镜像：完整内容写入工作区 .dsh-uploadux/reads/，返回提示文案（失败静默返回空串）。 */
+async function mirrorToWorkspace(
+  exec: ToolExecution,
+  found: { row: { name: string }; bytes: Buffer },
+): Promise<string> {
+  try {
+    const cwd = exec.agent?.session.header.cwd
+    if (cwd === undefined || cwd === '') return ''
+    const mirrorDir = resolve(cwd, '.dsh-uploadux', 'reads')
+    const mirrorPath = resolve(mirrorDir, found.row.name)
+    if (!existsSyncSync(mirrorPath)) {
+      await mkdir(mirrorDir, { recursive: true })
+      await writeFile(mirrorPath, found.bytes)
+    }
+    return `\n[大文件] 完整内容已镜像到工作区 ".dsh-uploadux/reads/${found.row.name}"（${found.bytes.byteLength} 字节），需要全量内容时用 read 工具读取该文件。`
+  } catch {
+    return ''
+  }
 }
