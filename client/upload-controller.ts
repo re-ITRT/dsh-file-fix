@@ -46,7 +46,7 @@ export async function uploadOne(
   item: UploadItem,
   via: string,
 ): Promise<UploadedFile | undefined> {
-  deps.logger.info('[dsh-upload-ux] upload start %s (%s)', item.name, humanSize(item.size))
+  deps.logger.info('[dsh-file-fix] upload start %s (%s)', item.name, humanSize(item.size))
   const started = Date.now()
   try {
     const result = await deps.remote.persistFile({
@@ -58,24 +58,24 @@ export async function uploadOne(
     if (!result.ok) {
       const code = (result.error as { code?: string }).code ?? 'remote-failure'
       deps.actions.markError(item.id, codeToText(code))
-      deps.logger.warn('[dsh-upload-ux] upload failed %s: %s', item.name, code)
+      deps.logger.warn('[dsh-file-fix] upload failed %s: %s', item.name, code)
       return undefined
     }
     const outcome = result.value
     if (!outcome.ok) {
       deps.actions.markError(item.id, codeToText(outcome.code))
-      deps.logger.warn('[dsh-upload-ux] upload failed %s: %s', item.name, outcome.code)
+      deps.logger.warn('[dsh-file-fix] upload failed %s: %s', item.name, outcome.code)
       return undefined
     }
     deps.actions.markDone(item.id, outcome.file.attachmentId, outcome.file.size)
     deps.logger.info(
-      '[dsh-upload-ux] upload ok %s -> %s %dms via=%s',
+      '[dsh-file-fix] upload ok %s -> %s %dms via=%s',
       item.name, outcome.file.attachmentId, Date.now() - started, via,
     )
     return outcome.file
   } catch (error) {
     deps.actions.markError(item.id, codeToText('write-failed'))
-    deps.logger.error('[dsh-upload-ux] upload exception %s: %o', item.name, error)
+    deps.logger.error('[dsh-file-fix] upload exception %s: %o', item.name, error)
     return undefined
   }
 }
@@ -86,9 +86,9 @@ export async function uploadOne(
  */
 export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via: string): Promise<void> {
   const { actions, getLimits, logger } = deps
-  console.log('[dsh-upload-ux:debug] intakeFiles', via, files.length, files.map(f => f.name).join(','))
+  console.log('[dsh-file-fix:debug] intakeFiles', via, files.length, files.map(f => f.name).join(','))
   logger.info(
-    '[dsh-upload-ux] intake files=%d images=%d others=%d via=%s',
+    '[dsh-file-fix] intake files=%d images=%d others=%d via=%s',
     files.length,
     files.filter(file => file.type.startsWith('image/')).length,
     files.filter(file => !file.type.startsWith('image/')).length,
@@ -99,19 +99,19 @@ export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via:
   if (limits !== null) {
     if (files.length > limits.maxFilesPerBatch) {
       actions.setNotice(`一次最多上传 ${limits.maxFilesPerBatch} 个文件`)
-      logger.warn('[dsh-upload-ux] intake rejected: TOO_MANY files=%d limit=%d', files.length, limits.maxFilesPerBatch)
+      logger.warn('[dsh-file-fix] intake rejected: TOO_MANY files=%d limit=%d', files.length, limits.maxFilesPerBatch)
       return
     }
     const oversize = files.find(file => file.size > limits.maxFileBytes)
     if (oversize !== undefined) {
       actions.setNotice(`文件超过大小限制（${humanSize(limits.maxFileBytes)}）`)
-      logger.warn('[dsh-upload-ux] intake rejected: TOO_LARGE name=%s', oversize.name)
+      logger.warn('[dsh-file-fix] intake rejected: TOO_LARGE name=%s', oversize.name)
       return
     }
     const total = files.reduce((sum, file) => sum + file.size, 0)
     if (total > limits.maxBatchBytes) {
       actions.setNotice(`批量总大小超过限制（${humanSize(limits.maxBatchBytes)}）`)
-      logger.warn('[dsh-upload-ux] intake rejected: BATCH_TOO_LARGE bytes=%d', total)
+      logger.warn('[dsh-file-fix] intake rejected: BATCH_TOO_LARGE bytes=%d', total)
       return
     }
   }
@@ -121,7 +121,7 @@ export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via:
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const data = await readAsDataUrl(file).catch(() => '')
     if (data === '') {
-      logger.warn('[dsh-upload-ux] read failed %s', file.name)
+      logger.warn('[dsh-file-fix] read failed %s', file.name)
       actions.addUploading({ id, name: file.name, size: file.size, mediaType: file.type, data: '', status: 'uploading' })
       actions.markError(id, '读取失败')
       continue
@@ -137,11 +137,11 @@ export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via:
   }
 
   if (uploaded.length > 0) {
-    console.log('[dsh-upload-ux:debug] calling markPending', via, uploaded.length)
+    console.log('[dsh-file-fix:debug] calling markPending', via, uploaded.length)
     void deps.remote.markPending({ sessionId: deps.sessionId, files: uploaded }).then(result => {
-      console.log('[dsh-upload-ux:debug] markPending result', result.ok ? 'ok' : JSON.stringify(result.error))
+      console.log('[dsh-file-fix:debug] markPending result', result.ok ? 'ok' : JSON.stringify(result.error))
       logger.info(
-        '[dsh-upload-ux] markPending %s: %d file(s) -> %s',
+        '[dsh-file-fix] markPending %s: %d file(s) -> %s',
         via, uploaded.length, result.ok ? 'ok' : `failed ${result.error}`,
       )
     })

@@ -1,4 +1,4 @@
-# dsh-upload-ux
+# dsh-file-fix
 
 DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**——任何后缀的文件都能
 拖入 / 粘贴 / 点击选择，**字节上传到附件库**（不依赖工作区路径，服务器部署可用），
@@ -28,7 +28,7 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
   - `place_attachment`：把附件字节导出到会话工作区任意路径（边界校验，防 `../` 逃逸）
 - 历史消息：`uploadux/files` 会话事件（ignorable）记录「消息 ↔ 文件」关联，客户端
   shadow 官方 user 节点渲染器，在文字气泡下方渲染文件列表气泡（文件名+大小+下载链接，
-  下载走 `/plugins/dsh-upload-ux/download/<attachmentId>`，限 API token）
+  下载走 `/plugins/dsh-file-fix/download/<attachmentId>`，限 API token）
 - 交互照 Hermes：统一 rail 混排（缩略图降采样队列）、chip 三态（上传中/完成/失败点击重试）、
   删除 chip 连带删附件、Esc 取消拖拽、深度计数防闪烁、drop 后焦点回输入框
 - 限制（插件 config 可覆盖）：单文件 50 MB、每批 20 个、批量总量 200 MB；超限整批拒绝 + 提示
@@ -60,7 +60,7 @@ npm run build      # host tsc 编译到 lib/ + esbuild 打包 dist/client.js
 
 # 2. 挂载到 dsh profile（以 web profile 为例）
 node scripts/mk-junction.cjs node_modules "<你的 dsh profile>/node_modules"
-node scripts/mk-junction.cjs "<你的 dsh profile>/web/node_modules/dsh-upload-ux" "$PWD"
+node scripts/mk-junction.cjs "<你的 dsh profile>/web/node_modules/dsh-file-fix" "$PWD"
 # 3. 在 profile 的 cordis.patch.yml 里加载本插件（参照 cordis.dev.yml）
 ```
 
@@ -76,13 +76,13 @@ node scripts/mk-junction.cjs "<你的 dsh profile>/web/node_modules/dsh-upload-u
 # 3. 本项目依赖解析指向 heal 产物：
 node scripts/mk-junction.cjs node_modules "C:\Users\<user>\.dsh\profiles\node_modules"
 # 4. 让 profile 能以包名解析本项目（client 插件发现机制需要）：
-node scripts/mk-junction.cjs "C:\Users\<user>\.dsh\profiles\web\node_modules\dsh-upload-ux" "C:\Users\<user>\hermes-workspace\dsh-upload-ux"
+node scripts/mk-junction.cjs "C:\Users\<user>\.dsh\profiles\web\node_modules\dsh-file-fix" "C:\Users\<user>\hermes-workspace\dsh-file-fix"
 ```
 
 开发循环（在 deepseek-harness 目录跑）：
 
 ```bash
-pnpm dsh web --patch ../dsh-upload-ux/cordis.dev.yml --port 3081
+pnpm dsh web --patch ../dsh-file-fix/cordis.dev.yml --port 3081
 # host 改动：npm run build 后重启 dsh（lib/ 是包入口）
 # client 改动：npm run build（重建 dist/client.js）+ 刷新页面
 ```
@@ -95,7 +95,7 @@ npm run build       # tsc 编译宿主侧到 lib/ + esbuild 打包 client bundle
 
 ## 日志约定
 
-`[dsh-upload-ux]` 前缀，全链路可还原：`intake(入口/分流统计) → persistFile(校验/拒绝 code/写入路径/耗时)
+`[dsh-file-fix]` 前缀，全链路可还原：`intake(入口/分流统计) → persistFile(校验/拒绝 code/写入路径/耗时)
 → ref injected(引用注入) → chip removed(删除)`，失败带 code（TOO_LARGE / EMPTY / SESSION_NOT_FOUND /
 NO_WORKSPACE / WRITE_FAILED / INVALID_PATH / REMOVE_FAILED）。
 

@@ -12,7 +12,7 @@ try {
   ;({ build } = require(REPO_ESBUILD))
 }
 
-const id = 'dsh-upload-ux'
+const id = 'dsh-file-fix'
 const barePath = 'dist/client.bare.js'
 const outPath = 'dist/client.js'
 
@@ -42,4 +42,4 @@ const wrapped = 'window.__ModuleLoader__.load({\n' +
   '});\n'
 writeFileSync(outPath, wrapped)
 unlinkSync(barePath)
-console.log('[dsh-upload-ux] client bundle written:', outPath, '(' + wrapped.length + ' bytes)')
+console.log('[dsh-file-fix] client bundle written:', outPath, '(' + wrapped.length + ' bytes)')

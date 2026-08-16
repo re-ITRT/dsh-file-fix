@@ -221,7 +221,7 @@ function registerVisualAssistTool(ctx: Context, store: FileAttachmentStore): () 
         id: `vision-${Date.now()}` as Message['id'],
         role: 'user',
         content: blocks,
-        source: { kind: 'plugin', plugin: 'dsh-upload-ux', form: 'notice', summary: '📷 图片' },
+        source: { kind: 'plugin', plugin: 'dsh-file-fix', form: 'notice', summary: '📷 图片' },
       }
       let text = ''
       for await (const chunk of llm.stream({
@@ -255,7 +255,7 @@ export function installVisionRoute(ctx: Context, store: FileAttachmentStore): vo
       if (vision) addDisposer = registerAddImageTool(ctx, store)
       else assistDisposer = registerVisualAssistTool(ctx, store)
       current = vision ? 'vision' : 'text'
-      ctx.logger.info('[dsh-upload-ux] vision route: %s -> %s tool(s)', model, vision ? 'add_image_to_context' : 'visual_assist')
+      ctx.logger.info('[dsh-file-fix] vision route: %s -> %s tool(s)', model, vision ? 'add_image_to_context' : 'visual_assist')
     }).catch(() => { /* 模型路由未解析时保持现状 */ })
   }
 

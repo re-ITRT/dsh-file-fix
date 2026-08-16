@@ -19,7 +19,7 @@ export interface ManifestRow {
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    uploaduxStore: FileAttachmentStore
+    filefixStore: FileAttachmentStore
   }
 }
 
@@ -29,7 +29,7 @@ function toUploadedFile(row: ManifestRow): UploadedFile {
 }
 
 /**
- * 内容寻址附件库服务（service key `uploaduxStore`）。对象布局与官方图片附件
+ * 内容寻址附件库服务（service key `filefixStore`）。对象布局与官方图片附件
  * 同思路（objects/<sha前2>/<sha>），但独占 uploadux 根目录与清单，互不干扰。
  */
 export class FileAttachmentStore extends Service {
@@ -38,8 +38,8 @@ export class FileAttachmentStore extends Service {
   readonly manifestPath: string
 
   constructor(ctx: Context, config: { home?: string } = {}) {
-    super(ctx, 'uploaduxStore')
-    this.root = resolve(join(config.home ?? dshHomePath(), 'attachments', 'uploadux'))
+    super(ctx, 'filefixStore')
+    this.root = resolve(join(config.home ?? dshHomePath(), 'attachments', 'filefix'))
     this.objectsDir = join(this.root, 'objects')
     this.manifestPath = join(this.root, 'manifest.jsonl')
   }

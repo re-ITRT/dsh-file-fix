@@ -1,4 +1,4 @@
-/** dsh-upload-ux 浏览器半：Remote 挂载、拦截、rail + 选择按钮、历史文件气泡节点。 */
+/** dsh-file-fix 浏览器半：Remote 挂载、拦截、rail + 选择按钮、历史文件气泡节点。 */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ReactElement } from 'react'
@@ -12,15 +12,15 @@ import { UploadRail } from './UploadRail.tsx'
 import { UserNodeWithFiles, setUserNodeUpload } from './UserNodeWithFiles.tsx'
 import { VisionSettingsSection, setVisionUpload } from './VisionSettingsSection.tsx'
 
-export const name = 'dsh-upload-ux'
+export const name = 'dsh-file-fix'
 
 export const inject = ['slots', 'remote']
 
 export async function apply(ctx: ClientContext): Promise<void> {
   // 上传工具面：预检 + 字节上传 + 挂载，注入注入面（rail/picker/history 共享）。
   await ctx.remote.$mount(UPLOAD_TYPERT_REMOTE)
-  // 命名空间服务由 $mount 注册为 remote.uploadux —— 用 ctx.get 读取。
-  const upload = ctx.get('remote.uploadux') as UploadRemote
+  // 命名空间服务由 $mount 注册为 remote.filefix —— 用 ctx.get 读取。
+  const upload = ctx.get('remote.filefix') as UploadRemote
 
   // 限制：启动时拉一次，失败保持 null（预检跳过，由 host 端拒绝兜底）。
   const limitsBox: { value: UploadLimits | null } = { value: null }
@@ -28,14 +28,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
     if (result.ok) {
       limitsBox.value = result.value
       ctx.logger.info(
-        '[dsh-upload-ux] limits loaded: %d bytes/file, %d files/batch, %d bytes/batch',
+        '[dsh-file-fix] limits loaded: %d bytes/file, %d files/batch, %d bytes/batch',
         result.value.maxFileBytes, result.value.maxFilesPerBatch, result.value.maxBatchBytes,
       )
     } else {
-      ctx.logger.warn('[dsh-upload-ux] limits unavailable: %o', result.error)
+      ctx.logger.warn('[dsh-file-fix] limits unavailable: %o', result.error)
     }
   }).catch(error => {
-    ctx.logger.warn('[dsh-upload-ux] limits fetch failed: %o', error)
+    ctx.logger.warn('[dsh-file-fix] limits fetch failed: %o', error)
   })
 
   // rail + picker 共享同一个 store handle（同 scope 同一实例）与 inject 面。
@@ -90,12 +90,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
       ctx.slots.inject('settings.section', () => {
         const dispose = ctx.slots.register({
           name: 'settings.section',
-          id: 'uploadux-vision',
+          id: 'filefix-vision',
           order: 120,
           label: '视觉辅助',
         }, VisionSettingsSection)
         return () => { dispose() }
       })
 
-      ctx.logger.info('[dsh-upload-ux] client loaded: intercept + rail + picker + file bubbles + vision settings')
+      ctx.logger.info('[dsh-file-fix] client loaded: intercept + rail + picker + file bubbles + vision settings')
 }

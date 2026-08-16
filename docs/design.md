@@ -1,4 +1,4 @@
-# dsh-upload-ux 设计稿 v0.2
+# dsh-file-fix 设计稿 v0.2
 
 > 目标：把 dsh 的「图片专属导入」改为「统一文件导入体系」——任何后缀都走同一条导入通道。
 > 已拍板：**完全不保留官方导入链路**（图片也走我们的通道），其余照 Hermes 的做法。
@@ -133,7 +133,7 @@ drop/paste/📎(File[])
 
 | 时机 | 级别 | 内容 |
 | --- | --- | --- |
-| 服务注册 | info | `[dsh-upload-ux] host loaded, limits={...}` |
+| 服务注册 | info | `[dsh-file-fix] host loaded, limits={...}` |
 | persistFile 收到 | info | `persistFile session=<id> name=<name> mediaType=<t> bytes=<n>` |
 | 拒绝 | warn | `persistFile rejected: <code> name=<name> bytes=<n> limit=<n>`（TOO_LARGE / INVALID_NAME / EMPTY / TOO_MANY） |
 | 写入成功 | info | `persistFile ok → <relPath> (<human size>) in <ms>ms` |

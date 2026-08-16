@@ -54,7 +54,7 @@ export function UploadRail(props: UploadRailProps): React.ReactElement | null {
   useEffect(() => {
     if (hadDraft.current && draft === '') {
       actions.clearAll()
-      logger.info('[dsh-upload-ux] draft committed — rail cleared')
+      logger.info('[dsh-file-fix] draft committed — rail cleared')
     }
     hadDraft.current = draft !== ''
   }, [draft])
@@ -68,11 +68,11 @@ export function UploadRail(props: UploadRailProps): React.ReactElement | null {
 
   const removeChip = (item: UploadItem): void => {
     actions.removeItem(item.id)
-    logger.info('[dsh-upload-ux] chip removed %s attachment=%s', item.name, item.attachmentId ?? '(pending)')
+    logger.info('[dsh-file-fix] chip removed %s attachment=%s', item.name, item.attachmentId ?? '(pending)')
     if (item.attachmentId !== undefined) {
       void upload.unmarkPending({ sessionId, attachmentId: item.attachmentId }).catch(() => {})
       void upload.removeFile({ sessionId, attachmentId: item.attachmentId }).then(result => {
-        if (!result.ok) logger.warn('[dsh-upload-ux] remote removeFile failed %s: %o', item.attachmentId, result.error)
+        if (!result.ok) logger.warn('[dsh-file-fix] remote removeFile failed %s: %o', item.attachmentId, result.error)
       })
     }
   }
@@ -80,7 +80,7 @@ export function UploadRail(props: UploadRailProps): React.ReactElement | null {
   const retryChip = (item: UploadItem): void => {
     const deps = depsRef.current
     if (deps === null || item.data === '') return
-    logger.info('[dsh-upload-ux] upload retry %s', item.name)
+    logger.info('[dsh-file-fix] upload retry %s', item.name)
     actions.removeItem(item.id)
     actions.addUploading({ ...item, status: 'uploading', error: undefined })
     void uploadOne(deps, { ...item, status: 'uploading' }, 'retry').then(file => {

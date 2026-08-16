@@ -1,4 +1,4 @@
-/** uploadux 命名空间的客户端 Remote 贡献：zod 严格 codec + 类型合并。 */
+/** filefix 命名空间的客户端 Remote 贡献：zod 严格 codec + 类型合并。 */
 
 import { z } from 'zod'
 import type {
@@ -90,58 +90,58 @@ const unmarkPendingOutcome$schema = z.union([
 ]).readonly()
 
 export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
-  package: 'dsh-upload-ux',
+  package: 'dsh-file-fix',
   descriptors: [
     {
-      id: 'dsh-upload-ux#uploadux/persistFile',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/persistFile',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'persistFile',
       invocation: { kind: 'direct' },
       parameters: [{
         name: 'request',
         wire: 'request',
         source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-upload-ux#PersistFileRequest', schema: persistFileRequest$schema },
+        codec: { mode: 'strict', typeSymbol: 'dsh-file-fix#PersistFileRequest', schema: persistFileRequest$schema },
       }],
-      result: { mode: 'strict', typeSymbol: 'dsh-upload-ux#PersistFileOutcome', schema: persistFileOutcome$schema },
+      result: { mode: 'strict', typeSymbol: 'dsh-file-fix#PersistFileOutcome', schema: persistFileOutcome$schema },
     },
     {
-      id: 'dsh-upload-ux#uploadux/limits',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/limits',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'limits',
       invocation: { kind: 'direct' },
       parameters: [],
-      result: { mode: 'strict', typeSymbol: 'dsh-upload-ux#UploadLimits', schema: uploadLimits$schema },
+      result: { mode: 'strict', typeSymbol: 'dsh-file-fix#UploadLimits', schema: uploadLimits$schema },
     },
     {
-      id: 'dsh-upload-ux#uploadux/removeFile',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/removeFile',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'removeFile',
       invocation: { kind: 'direct' },
       parameters: [{
         name: 'request',
         wire: 'request',
         source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-upload-ux#RemoveFileRequest', schema: removeFileRequest$schema },
+        codec: { mode: 'strict', typeSymbol: 'dsh-file-fix#RemoveFileRequest', schema: removeFileRequest$schema },
       }],
-      result: { mode: 'strict', typeSymbol: 'dsh-upload-ux#RemoveFileOutcome', schema: removeFileOutcome$schema },
+      result: { mode: 'strict', typeSymbol: 'dsh-file-fix#RemoveFileOutcome', schema: removeFileOutcome$schema },
     },
     {
-      id: 'dsh-upload-ux#uploadux/listFiles',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/listFiles',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'listFiles',
       invocation: { kind: 'direct' },
       parameters: [{
         name: 'request',
         wire: 'request',
         source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-upload-ux#ListFilesRequest', schema: z.object({ sessionId: z.string() }).readonly() },
+        codec: { mode: 'strict', typeSymbol: 'dsh-file-fix#ListFilesRequest', schema: z.object({ sessionId: z.string() }).readonly() },
       }],
-      result: { mode: 'strict', typeSymbol: 'dsh-upload-ux#ListFilesOutcome', schema: z.object({
+      result: { mode: 'strict', typeSymbol: 'dsh-file-fix#ListFilesOutcome', schema: z.object({
         ok: z.literal(true),
         items: z.array(z.object({
           messageId: z.string(),
@@ -151,9 +151,9 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       }).readonly() },
     },
     {
-      id: 'dsh-upload-ux#uploadux/getVisionConfig',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/getVisionConfig',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'getVisionConfig',
       invocation: { kind: 'direct' },
       parameters: [],
@@ -167,9 +167,9 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       },
     },
     {
-      id: 'dsh-upload-ux#uploadux/setVisionConfig',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/setVisionConfig',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'setVisionConfig',
       invocation: { kind: 'direct' },
       parameters: [{
@@ -189,9 +189,9 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       },
     },
     {
-      id: 'dsh-upload-ux#uploadux/testVisionModel',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/testVisionModel',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'testVisionModel',
       invocation: { kind: 'direct' },
       parameters: [{
@@ -218,9 +218,9 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       },
     },
     {
-      id: 'dsh-upload-ux#uploadux/listVisionCandidates',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/listVisionCandidates',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'listVisionCandidates',
       invocation: { kind: 'direct' },
       parameters: [],
@@ -234,42 +234,42 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       },
     },
     {
-      id: 'dsh-upload-ux#uploadux/markPending',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/markPending',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'markPending',
       invocation: { kind: 'direct' },
       parameters: [{
         name: 'request',
         wire: 'request',
         source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-upload-ux#MarkPendingRequest', schema: markPendingRequest$schema },
+        codec: { mode: 'strict', typeSymbol: 'dsh-file-fix#MarkPendingRequest', schema: markPendingRequest$schema },
       }],
-      result: { mode: 'strict', typeSymbol: 'dsh-upload-ux#MarkPendingOutcome', schema: markPendingOutcome$schema },
+      result: { mode: 'strict', typeSymbol: 'dsh-file-fix#MarkPendingOutcome', schema: markPendingOutcome$schema },
     },
     {
-      id: 'dsh-upload-ux#uploadux/unmarkPending',
-      service: 'uploadux',
-      namespace: 'uploadux',
+      id: 'dsh-file-fix#filefix/unmarkPending',
+      service: 'filefix',
+      namespace: 'filefix',
       method: 'unmarkPending',
       invocation: { kind: 'direct' },
       parameters: [{
         name: 'request',
         wire: 'request',
         source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-upload-ux#UnmarkPendingRequest', schema: unmarkPendingRequest$schema },
+        codec: { mode: 'strict', typeSymbol: 'dsh-file-fix#UnmarkPendingRequest', schema: unmarkPendingRequest$schema },
       }],
-      result: { mode: 'strict', typeSymbol: 'dsh-upload-ux#UnmarkPendingOutcome', schema: unmarkPendingOutcome$schema },
+      result: { mode: 'strict', typeSymbol: 'dsh-file-fix#UnmarkPendingOutcome', schema: unmarkPendingOutcome$schema },
     },
   ],
 }
 
-/** 客户端可用的 uploadux 命名空间完整类型（组件与管线共用）。 */
-export type UploadRemote = TypertRemoteNamespace<'uploadux'>
+/** 客户端可用的 filefix 命名空间完整类型（组件与管线共用）。 */
+export type UploadRemote = TypertRemoteNamespace<'filefix'>
 
-/** 客户端类型合并：让 ctx.remote.uploadux.<method> 全程有类型。 */
+/** 客户端类型合并：让 ctx.remote.filefix.<method> 全程有类型。 */
 declare module '@deepseek-ai/dsh-typert-protocol' {
-  interface TypertRemoteNamespace$uploadux {
+  interface TypertRemoteNamespace$filefix {
     persistFile: (request: PersistFileRequest) => Promise<RemoteResult<PersistFileOutcome>>
     limits: () => Promise<RemoteResult<UploadLimits>>
     removeFile: (request: RemoveFileRequest) => Promise<RemoteResult<RemoveFileOutcome>>
@@ -283,19 +283,19 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 
   interface TypertRemoteMap {
-    'uploadux/persistFile': (request: PersistFileRequest) => Promise<RemoteResult<PersistFileOutcome>>
-    'uploadux/limits': () => Promise<RemoteResult<UploadLimits>>
-    'uploadux/removeFile': (request: RemoveFileRequest) => Promise<RemoteResult<RemoveFileOutcome>>
-    'uploadux/listFiles': (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; items: FilesAttachedEntry[] }>>
-    'uploadux/markPending': (request: MarkPendingRequest) => Promise<RemoteResult<MarkPendingOutcome>>
-    'uploadux/unmarkPending': (request: UnmarkPendingRequest) => Promise<RemoteResult<UnmarkPendingOutcome>>
-    'uploadux/getVisionConfig': () => Promise<RemoteResult<{ ok: true; config: { provider?: string; model?: string } }>>
-    'uploadux/setVisionConfig': (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
-    'uploadux/testVisionModel': (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
-    'uploadux/listVisionCandidates': () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
+    'filefix/persistFile': (request: PersistFileRequest) => Promise<RemoteResult<PersistFileOutcome>>
+    'filefix/limits': () => Promise<RemoteResult<UploadLimits>>
+    'filefix/removeFile': (request: RemoveFileRequest) => Promise<RemoteResult<RemoveFileOutcome>>
+    'filefix/listFiles': (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; items: FilesAttachedEntry[] }>>
+    'filefix/markPending': (request: MarkPendingRequest) => Promise<RemoteResult<MarkPendingOutcome>>
+    'filefix/unmarkPending': (request: UnmarkPendingRequest) => Promise<RemoteResult<UnmarkPendingOutcome>>
+    'filefix/getVisionConfig': () => Promise<RemoteResult<{ ok: true; config: { provider?: string; model?: string } }>>
+    'filefix/setVisionConfig': (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
+    'filefix/testVisionModel': (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
+    'filefix/listVisionCandidates': () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
   }
 
   interface TypertRemoteNamespaceMap {
-    uploadux: TypertRemoteNamespace$uploadux
+    filefix: TypertRemoteNamespace$filefix
   }
 }

@@ -1,4 +1,4 @@
-/** dsh-upload-ux 线类型：uploadux 命名空间端点 + 会话事件载荷。 */
+/** dsh-file-fix 线类型：uploadux 命名空间端点 + 会话事件载荷。 */
 
 /** 部署级上传限制（客户端预检与展示共用）。 */
 export interface UploadLimits {

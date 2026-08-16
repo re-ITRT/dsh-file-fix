@@ -8,11 +8,11 @@ import type { UploadService } from './remote.ts'
 import type { FilesAttachedEventData, UploadedFile } from './types.ts'
 
 /** 自定义会话事件类型（ignorable：跨版本重放安全，客户端节点定义负责渲染）。 */
-export const FILES_ATTACHED_EVENT = 'uploadux/files'
+export const FILES_ATTACHED_EVENT = 'filefix/files'
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
-    'uploadux/files': FilesAttachedEventData
+    'filefix/files': FilesAttachedEventData
   }
 }
 
@@ -51,7 +51,7 @@ function systemMessage(text: string, id: string, files: UploadedFile[]): Message
     content: [{ type: 'text', text }],
     source: {
       kind: 'plugin',
-      plugin: 'dsh-upload-ux',
+      plugin: 'dsh-file-fix',
       form: 'notice',
       summary: `📎 附件 ${files.length} 个文件`,
     },
@@ -83,7 +83,7 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
         }
       }
     } catch (error) {
-      ctx.logger.warn('[dsh-upload-ux] rebuild attachments failed for %s: %o', String(sessionId), error)
+      ctx.logger.warn('[dsh-file-fix] rebuild attachments failed for %s: %o', String(sessionId), error)
     }
   }
 

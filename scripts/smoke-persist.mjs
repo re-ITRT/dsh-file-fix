@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { persistFileBytes, removeFileBytes, sanitizeName } from '../lib/persist.js'
 
-const root = await mkdtemp(join(tmpdir(), 'dsh-upload-ux-test-'))
+const root = await mkdtemp(join(tmpdir(), 'dsh-file-fix-test-'))
 const ok = (name) => console.log('PASS', name)
 const fail = (name, e) => { console.error('FAIL', name, e); process.exitCode = 1 }
 

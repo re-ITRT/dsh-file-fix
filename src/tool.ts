@@ -45,13 +45,13 @@ function decodeText(bytes: Buffer): string | undefined {
 export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentStore, config: Config): void {
   const tools = ctx.get('tools')
   if (tools === undefined) {
-    ctx.logger.warn('[dsh-upload-ux] tools service absent — read_attachment not registered')
+    ctx.logger.warn('[dsh-file-fix] tools service absent — read_attachment not registered')
     return
   }
   tools.register(defineTool({
     name: 'read_attachment',
     description: [
-      'Read the content of a file the user uploaded through dsh-upload-ux.',
+      'Read the content of a file the user uploaded through dsh-file-fix.',
       'The file lives in the attachment store (independent of the workspace filesystem);',
       'look up its attachment_id from the system message that lists uploaded files.',
       'Text-like content is returned as text; binary content returns size and media type only.',
@@ -152,7 +152,7 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
 export function registerPlaceAttachmentTool(ctx: Context, store: FileAttachmentStore, config: Config): void {
   const tools = ctx.get('tools')
   if (tools === undefined) {
-    ctx.logger.warn('[dsh-upload-ux] tools service absent — place_attachment not registered')
+    ctx.logger.warn('[dsh-file-fix] tools service absent — place_attachment not registered')
     return
   }
   tools.register(defineTool({

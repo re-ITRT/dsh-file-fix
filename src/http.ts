@@ -1,10 +1,10 @@
-/** 附件下载路由：/plugins/dsh-upload-ux/download/<attachmentId>。 */
+/** 附件下载路由：/plugins/dsh-file-fix/download/<attachmentId>。 */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { FileAttachmentStore } from './store.ts'
 
-const PREFIX = '/plugins/dsh-upload-ux/download/'
+const PREFIX = '/plugins/dsh-file-fix/download/'
 
 function sendError(res: ServerResponse, code: number, text: string): void {
   res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' })
@@ -14,7 +14,7 @@ function sendError(res: ServerResponse, code: number, text: string): void {
 export function registerDownloadRoute(ctx: Context, store: FileAttachmentStore): void {
   const webServer = ctx.get('webServer')
   if (webServer === undefined) {
-    ctx.logger.warn('[dsh-upload-ux] webServer absent — download route not registered')
+    ctx.logger.warn('[dsh-file-fix] webServer absent — download route not registered')
     return
   }
   webServer.register({
@@ -54,5 +54,5 @@ export function registerDownloadRoute(ctx: Context, store: FileAttachmentStore):
       res.end(found.bytes)
     },
   })
-  ctx.logger.info('[dsh-upload-ux] download route registered at %s', PREFIX)
+  ctx.logger.info('[dsh-file-fix] download route registered at %s', PREFIX)
 }

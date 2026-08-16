@@ -1,4 +1,4 @@
-/** uploadux 命名空间 Typert Remote 服务：persistFile / limits / removeFile / markPending。 */
+/** filefix 命名空间 Typert Remote 服务：persistFile / limits / removeFile / markPending。 */
 
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -22,7 +22,7 @@ import type {
 } from './types.ts'
 
 export class UploadService extends TypertRemoteService {
-  static inject = ['uploaduxStore']
+  static inject = ['filefixStore']
 
 /** 已挂载文件：messageId → {seq, files}（seq 供客户端按用户消息定位气泡）。 */
   readonly attached = new Map<string, { seq: number; files: UploadedFile[] }>()
@@ -34,11 +34,11 @@ export class UploadService extends TypertRemoteService {
     ctx: Context,
     readonly config: Config,
   ) {
-    super(ctx, 'uploadux')
+    super(ctx, 'filefix')
   }
 
   get store(): FileAttachmentStore {
-    return this.ctx.uploaduxStore
+    return this.ctx.filefixStore
   }
 
   @Remote('limits')
@@ -56,12 +56,12 @@ export class UploadService extends TypertRemoteService {
     const bytes = Buffer.from(request.data, 'base64')
 
     if (bytes.byteLength === 0) {
-      this.ctx.logger.warn('[dsh-upload-ux] persistFile rejected: EMPTY name=%s', request.name)
+      this.ctx.logger.warn('[dsh-file-fix] persistFile rejected: EMPTY name=%s', request.name)
       return { ok: false, code: 'empty' }
     }
     if (bytes.byteLength > this.config.maxFileBytes) {
       this.ctx.logger.warn(
-        '[dsh-upload-ux] persistFile rejected: TOO_LARGE name=%s bytes=%d limit=%d',
+        '[dsh-file-fix] persistFile rejected: TOO_LARGE name=%s bytes=%d limit=%d',
         request.name, bytes.byteLength, this.config.maxFileBytes,
       )
       return { ok: false, code: 'too-large', detail: `max ${this.config.maxFileBytes} bytes` }
@@ -74,7 +74,7 @@ export class UploadService extends TypertRemoteService {
     const mediaType = mediaTypeOf(request)
 
     this.ctx.logger.info(
-      '[dsh-upload-ux] persistFile session=%s name=%s mediaType=%s bytes=%d',
+      '[dsh-file-fix] persistFile session=%s name=%s mediaType=%s bytes=%d',
       request.sessionId, name, mediaType, bytes.byteLength,
     )
 
@@ -86,12 +86,12 @@ export class UploadService extends TypertRemoteService {
         bytes,
       })
       this.ctx.logger.info(
-        '[dsh-upload-ux] persistFile ok id=%s name=%s %dms',
+        '[dsh-file-fix] persistFile ok id=%s name=%s %dms',
         file.attachmentId, name, Date.now() - started,
       )
       return { ok: true, file }
     } catch (error) {
-      this.ctx.logger.error('[dsh-upload-ux] persistFile write failed: %o', error)
+      this.ctx.logger.error('[dsh-file-fix] persistFile write failed: %o', error)
       return { ok: false, code: 'write-failed', detail: (error as Error).message }
     }
   }
@@ -101,12 +101,12 @@ export class UploadService extends TypertRemoteService {
     try {
       const removed = await this.store.remove(request.attachmentId)
       this.ctx.logger.info(
-        '[dsh-upload-ux] removeFile %s -> %s',
+        '[dsh-file-fix] removeFile %s -> %s',
         request.attachmentId, removed ? 'ok' : 'not-found',
       )
       return { ok: true, absent: !removed }
     } catch (error) {
-      this.ctx.logger.error('[dsh-upload-ux] removeFile %s failed: %o', request.attachmentId, error)
+      this.ctx.logger.error('[dsh-file-fix] removeFile %s failed: %o', request.attachmentId, error)
       return { ok: false, code: 'remove-failed', detail: (error as Error).message }
     }
   }
@@ -126,7 +126,7 @@ export class UploadService extends TypertRemoteService {
     const existing = this.pending.get(request.sessionId) ?? []
     this.pending.set(request.sessionId, [...existing, ...request.files])
     this.ctx.logger.info(
-      '[dsh-upload-ux] markPending session=%s files=%d',
+      '[dsh-file-fix] markPending session=%s files=%d',
       request.sessionId, request.files.length,
     )
     return { ok: true }
@@ -140,7 +140,7 @@ export class UploadService extends TypertRemoteService {
   @Remote('setVisionConfig')
   async setVisionConfig(request: { config: VisionConfig }): Promise<{ ok: true }> {
     writeVisionConfig(request.config ?? {})
-    this.ctx.logger.info('[dsh-upload-ux] vision config updated: %o', request.config)
+    this.ctx.logger.info('[dsh-file-fix] vision config updated: %o', request.config)
     return { ok: true }
   }
 
@@ -186,7 +186,7 @@ export class UploadService extends TypertRemoteService {
     if (existing === undefined) return { ok: true }
     this.pending.set(request.sessionId, existing.filter(file => file.attachmentId !== request.attachmentId))
     this.ctx.logger.info(
-      '[dsh-upload-ux] unmarkPending session=%s attachment=%s',
+      '[dsh-file-fix] unmarkPending session=%s attachment=%s',
       request.sessionId, request.attachmentId,
     )
     return { ok: true }

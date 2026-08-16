@@ -16,7 +16,7 @@ export interface FileListBubbleProps {
 }
 
 export function downloadUrl(attachmentId: string): string {
-  return `/plugins/dsh-upload-ux/download/${attachmentId}`
+  return `/plugins/dsh-file-fix/download/${attachmentId}`
 }
 
 /** 历史消息下方：文件列表（附件机制，工作区无关）。 */
