@@ -51,7 +51,15 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
   48 KB 默认段 + 工作区镜像规避
 - 工具集无 shell 执行能力时 agent 无法解压/运行文件（环境问题，非插件）
 
-## 安装
+## 安装（推荐：npm 官方渠道）
+
+```bash
+dsh plugin --profile web add dsh-file-fix
+```
+
+插件市场安装（如果已装 dshmarket）：`dsh plugin --profile web add dshmarket` 后在市场里搜 `dsh-file-fix`。
+
+## 从源码构建安装
 
 ```bash
 # 1. 构建（需要 deepseek-harness 源码仓库的 node_modules 提供 tsc/esbuild）
