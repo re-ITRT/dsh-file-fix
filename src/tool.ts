@@ -11,7 +11,8 @@ import type { FileAttachmentStore } from './store.ts'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 
 /** UTF-8 可解码且无过多控制字符才当文本返回。 */
-function looksTextual(bytes: Buffer): boolean {
+/** UTF-8 字节流判文本：前 2048 字节内无 NUL 且控制字符占比 <5%（\t\n\r 除外）。 */
+function looksTextualUtf8(bytes: Buffer): boolean {
   if (bytes.byteLength === 0) return true
   let controls = 0
   for (let i = 0; i < Math.min(bytes.byteLength, 2048); i += 1) {
@@ -20,6 +21,25 @@ function looksTextual(bytes: Buffer): boolean {
     if (byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0d) controls += 1
   }
   return controls / Math.min(bytes.byteLength, 2048) < 0.05
+}
+
+/**
+ * 解码上传文件为文本：识别 UTF-16 LE/BE 与 UTF-8 BOM（记事本「另存为 UTF-16」
+ * 是 Windows 常见操作——ASCII 字符后跟 NUL，按 UTF-8 判必为二进制）；
+ * 纯 UTF-8 走控制字符检测。无法判文本时返回 undefined。
+ */
+function decodeText(bytes: Buffer): string | undefined {
+  if (bytes.byteLength >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(bytes.subarray(2))
+  }
+  if (bytes.byteLength >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder('utf-16be').decode(bytes.subarray(2))
+  }
+  if (bytes.byteLength >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return bytes.subarray(3).toString('utf8')
+  }
+  if (!looksTextualUtf8(bytes)) return undefined
+  return bytes.toString('utf8')
 }
 
 export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentStore, config: Config): void {
@@ -67,10 +87,10 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
           binary: { type: 'boolean' },
         },
       },
-      render: (_args, value: { name: string; mediaType: string; size: number; offset: number; more: boolean; text?: string; binary?: boolean }) => {
+      render: (_args, value: { name: string; mediaType: string; size: number; offset: number; more: boolean; text?: string; binary?: boolean; total?: number }) => {
         if (value.text !== undefined) {
           const banner = value.more
-            ? `[${value.name} 分段 ${value.offset}-${value.offset + value.text.length}/${value.size} 字节，继续用 offset=${value.offset + value.text.length} 读取]`
+            ? `[${value.name} 分段 ${value.offset}-${value.offset + value.text.length}/${value.total ?? '?'} 字符，继续用 offset=${value.offset + value.text.length} 读取]`
             : `[${value.name} ${value.size} 字节，读取完毕]`
           return [{ type: 'text', text: `${banner}\n${value.text}` }]
         }
@@ -88,7 +108,8 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
       if (found === undefined) {
         throw new Error(`attachment "${id}" does not exist in the upload store`)
       }
-      if (!looksTextual(found.bytes)) {
+      const decoded = decodeText(found.bytes)
+      if (decoded === undefined) {
         return {
           name: found.row.name,
           mediaType: found.row.mediaType,
@@ -103,9 +124,10 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
       const limit = Number.isFinite(requested) && requested > 0
         ? Math.min(requested, config.maxReadBytes)
         : config.readChunkBytes
-      const slice = found.bytes.subarray(offset, offset + limit)
-      const more = offset + slice.byteLength < found.bytes.byteLength
-      // 大文件镜像：完整内容写入工作区 .dsh-uploadux/reads/，模型可用官方 read 工具读全量。
+      // 字符单位切片（UTF-16 按字节切会切半字符）
+      const text = decoded.slice(offset, offset + limit)
+      const more = offset + limit < decoded.length
+      // 大文件镜像：完整内容写入工作区 .dsh-uploadux/reads/（UTF-16 转 UTF-8 后镜像）。
       let mirrorNote = ''
       if (config.readMirrorThreshold > 0 && found.bytes.byteLength > config.readMirrorThreshold) {
         mirrorNote = await mirrorToWorkspace(exec, found)
@@ -116,7 +138,8 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
         size: found.bytes.byteLength,
         offset,
         more,
-        text: slice.toString('utf8') + mirrorNote,
+        total: decoded.length,
+        text: text + mirrorNote,
       }
     },
   }))
