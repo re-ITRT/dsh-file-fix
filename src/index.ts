@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.ts'
 import { installAttachmentBridge } from './attach.ts'
+import { installVisionRoute } from './vision.ts'
 import { registerDownloadRoute } from './http.ts'
 import { UploadService } from './remote.ts'
 import { FileAttachmentStore } from './store.ts'
@@ -24,6 +25,7 @@ export function apply(ctx: Context, config: Config): void {
   installAttachmentBridge(ctx, service)
   registerReadAttachmentTool(ctx, store, config)
   registerPlaceAttachmentTool(ctx, store, config)
+  installVisionRoute(ctx, store)
   registerDownloadRoute(ctx, store)
 
   ctx.logger.info(

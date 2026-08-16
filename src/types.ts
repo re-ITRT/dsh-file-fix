@@ -73,6 +73,13 @@ export interface FilesAttachedEntry {
   files: UploadedFile[]
 }
 
+/** 视觉辅助候选 provider（设置页下拉）。 */
+export interface VisionCandidateProvider {
+  provider: string
+  displayName: string
+  models: { id: string; name: string; image: boolean }[]
+}
+
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     'uploadux/files': FilesAttachedEventData

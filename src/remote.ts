@@ -4,7 +4,9 @@ import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Config } from './config.ts'
 import { mediaTypeOf, sanitizeName } from './name.ts'
-import type { FilesAttachedEntry } from './types.ts'
+import { readVisionConfig, writeVisionConfig } from './vision.ts'
+import type { VisionConfig } from './vision.ts'
+import type { FilesAttachedEntry, VisionCandidateProvider } from './types.ts'
 import type { FileAttachmentStore } from './store.ts'
 import type {
   MarkPendingOutcome,
@@ -128,6 +130,54 @@ export class UploadService extends TypertRemoteService {
       request.sessionId, request.files.length,
     )
     return { ok: true }
+  }
+
+  @Remote('getVisionConfig')
+  async getVisionConfig(): Promise<{ ok: true; config: VisionConfig }> {
+    return { ok: true, config: readVisionConfig() }
+  }
+
+  @Remote('setVisionConfig')
+  async setVisionConfig(request: { config: VisionConfig }): Promise<{ ok: true }> {
+    writeVisionConfig(request.config ?? {})
+    this.ctx.logger.info('[dsh-upload-ux] vision config updated: %o', request.config)
+    return { ok: true }
+  }
+
+  @Remote('testVisionModel')
+  async testVisionModel(request: { provider: string; model: string }): Promise<{
+    ok: boolean
+    image: boolean
+    error?: string
+  }> {
+    const llm = this.ctx.get('llm')
+    if (llm === undefined) return { ok: false, image: false, error: 'llm service unavailable' }
+    try {
+      const info = await llm.resolveModelInfo(request.provider, request.model)
+      return { ok: true, image: info.inputModalities?.includes('image') === true }
+    } catch (error) {
+      return { ok: false, image: false, error: (error as Error).message }
+    }
+  }
+
+  @Remote('listVisionCandidates')
+  async listVisionCandidates(): Promise<{ ok: true; providers: VisionCandidateProvider[] }> {
+    const llm = this.ctx.get('llm')
+    if (llm === undefined) return { ok: true, providers: [] }
+    const providers: VisionCandidateProvider[] = []
+    for (const info of llm.listProviders()) {
+      const models = await llm.listModels(info.id).catch(() => [])
+      providers.push({
+        provider: info.id,
+        displayName: info.name,
+        models: models.map(model => ({
+          id: model.id,
+          name: model.name,
+          image: model.inputModalities?.includes('image') === true,
+        })),
+      })
+    }
+    return { ok: true, providers }
   }
 
   @Remote('unmarkPending')

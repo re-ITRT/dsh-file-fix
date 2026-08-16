@@ -19,6 +19,21 @@ import type {
   UploadLimits,
 } from '../src/types.ts'
 
+const visionConfig$schema = z.object({
+  provider: z.string().optional(),
+  model: z.string().optional(),
+}).readonly()
+
+const visionCandidate$schema = z.object({
+  provider: z.string(),
+  displayName: z.string(),
+  models: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    image: z.boolean(),
+  })).readonly(),
+}).readonly()
+
 const uploadedFile$schema = z.object({
   attachmentId: z.string(),
   name: z.string(),
@@ -136,6 +151,89 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       }).readonly() },
     },
     {
+      id: 'dsh-upload-ux#uploadux/getVisionConfig',
+      service: 'uploadux',
+      namespace: 'uploadux',
+      method: 'getVisionConfig',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'GetVisionConfigResult',
+        schema: z.object({
+          ok: z.literal(true),
+          config: visionConfig$schema,
+        }),
+      },
+    },
+    {
+      id: 'dsh-upload-ux#uploadux/setVisionConfig',
+      service: 'uploadux',
+      namespace: 'uploadux',
+      method: 'setVisionConfig',
+      invocation: { kind: 'direct' },
+      parameters: [{
+        name: 'request',
+        wire: 'request',
+        source: 'json',
+        codec: {
+          mode: 'strict',
+          typeSymbol: 'SetVisionConfigRequest',
+          schema: z.object({ config: visionConfig$schema }),
+        },
+      }],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'SetVisionConfigResult',
+        schema: z.object({ ok: z.literal(true) }),
+      },
+    },
+    {
+      id: 'dsh-upload-ux#uploadux/testVisionModel',
+      service: 'uploadux',
+      namespace: 'uploadux',
+      method: 'testVisionModel',
+      invocation: { kind: 'direct' },
+      parameters: [{
+        name: 'request',
+        wire: 'request',
+        source: 'json',
+        codec: {
+          mode: 'strict',
+          typeSymbol: 'TestVisionModelRequest',
+          schema: z.object({
+            provider: z.string(),
+            model: z.string(),
+          }),
+        },
+      }],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'TestVisionModelResult',
+        schema: z.object({
+          ok: z.boolean(),
+          image: z.boolean(),
+          error: z.string().optional(),
+        }),
+      },
+    },
+    {
+      id: 'dsh-upload-ux#uploadux/listVisionCandidates',
+      service: 'uploadux',
+      namespace: 'uploadux',
+      method: 'listVisionCandidates',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'ListVisionCandidatesResult',
+        schema: z.object({
+          ok: z.literal(true),
+          providers: z.array(visionCandidate$schema),
+        }),
+      },
+    },
+    {
       id: 'dsh-upload-ux#uploadux/markPending',
       service: 'uploadux',
       namespace: 'uploadux',
@@ -178,6 +276,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     listFiles: (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; items: FilesAttachedEntry[] }>>
     markPending: (request: MarkPendingRequest) => Promise<RemoteResult<MarkPendingOutcome>>
     unmarkPending: (request: UnmarkPendingRequest) => Promise<RemoteResult<UnmarkPendingOutcome>>
+    getVisionConfig: () => Promise<RemoteResult<{ ok: true; config: { provider?: string; model?: string } }>>
+    setVisionConfig: (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
+    testVisionModel: (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
+    listVisionCandidates: () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
   }
 
   interface TypertRemoteMap {
@@ -187,6 +289,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'uploadux/listFiles': (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; items: FilesAttachedEntry[] }>>
     'uploadux/markPending': (request: MarkPendingRequest) => Promise<RemoteResult<MarkPendingOutcome>>
     'uploadux/unmarkPending': (request: UnmarkPendingRequest) => Promise<RemoteResult<UnmarkPendingOutcome>>
+    'uploadux/getVisionConfig': () => Promise<RemoteResult<{ ok: true; config: { provider?: string; model?: string } }>>
+    'uploadux/setVisionConfig': (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
+    'uploadux/testVisionModel': (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
+    'uploadux/listVisionCandidates': () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
   }
 
   interface TypertRemoteNamespaceMap {

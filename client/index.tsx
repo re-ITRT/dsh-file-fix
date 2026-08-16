@@ -10,6 +10,7 @@ import { createUploadStore } from './store.ts'
 import { UploadPickerButton } from './UploadPickerButton.tsx'
 import { UploadRail } from './UploadRail.tsx'
 import { UserNodeWithFiles, setUserNodeUpload } from './UserNodeWithFiles.tsx'
+import { VisionSettingsSection, setVisionUpload } from './VisionSettingsSection.tsx'
 
 export const name = 'dsh-upload-ux'
 
@@ -48,6 +49,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // 历史气泡：shadow 官方 user/steering 节点渲染器（priority -1 胜出），包装官方组件 + 文件列表。
   // keyed 注册不支持 inject —— upload 经模块级引用传给包装组件。
   setUserNodeUpload(upload)
+  setVisionUpload(upload)
   ctx.slots.inject('conversation.chat.node', () => {
     const disposeUser = ctx.slots.register({
       name: 'conversation.chat.node',
@@ -81,8 +83,19 @@ export async function apply(ctx: ClientContext): Promise<void> {
       store,
       inject: () => share,
     }, UploadPickerButton)
-    return () => { dispose() }
-  })
+        return () => { dispose() }
+      })
 
-  ctx.logger.info('[dsh-upload-ux] client loaded: intercept + rail + picker + file bubbles')
+      // 设置 → 视觉辅助 section：配置 visual_assist 的辅助模型。
+      ctx.slots.inject('settings.section', () => {
+        const dispose = ctx.slots.register({
+          name: 'settings.section',
+          id: 'uploadux-vision',
+          order: 120,
+          label: '视觉辅助',
+        }, VisionSettingsSection)
+        return () => { dispose() }
+      })
+
+      ctx.logger.info('[dsh-upload-ux] client loaded: intercept + rail + picker + file bubbles + vision settings')
 }
