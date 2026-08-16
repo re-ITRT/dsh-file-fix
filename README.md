@@ -51,6 +51,19 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
   48 KB 默认段 + 工作区镜像规避
 - 工具集无 shell 执行能力时 agent 无法解压/运行文件（环境问题，非插件）
 
+## 安装
+
+```bash
+# 1. 构建（需要 deepseek-harness 源码仓库的 node_modules 提供 tsc/esbuild）
+npm install        # 或 pnpm install（package-lock 已提交）
+npm run build      # host tsc 编译到 lib/ + esbuild 打包 dist/client.js
+
+# 2. 挂载到 dsh profile（以 web profile 为例）
+node scripts/mk-junction.cjs node_modules "<你的 dsh profile>/node_modules"
+node scripts/mk-junction.cjs "<你的 dsh profile>/web/node_modules/dsh-upload-ux" "$PWD"
+# 3. 在 profile 的 cordis.patch.yml 里加载本插件（参照 cordis.dev.yml）
+```
+
 ## 开发环境（官方教程路径：源码 checkout + 干净 profile）
 
 一次性准备：
