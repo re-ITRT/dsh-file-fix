@@ -49,7 +49,7 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
       },
       limit: {
         type: 'integer',
-        description: 'Maximum bytes to read in this call (default and hard cap: the configured max).',
+        description: 'Maximum bytes to read in this call (default: ~48 KB chunk; hard cap: the configured max).',
       },
     },
     output: {
@@ -101,7 +101,7 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
       const requested = Math.floor(Number(args.limit))
       const limit = Number.isFinite(requested) && requested > 0
         ? Math.min(requested, config.maxReadBytes)
-        : config.maxReadBytes
+        : config.readChunkBytes
       const slice = found.bytes.subarray(offset, offset + limit)
       const more = offset + slice.byteLength < found.bytes.byteLength
       return {
