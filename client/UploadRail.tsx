@@ -8,6 +8,13 @@ import type { BakedUploadActions, UploadItem, UploadState } from './store.ts'
 import { humanSize } from './thumbnail.ts'
 import type { IntakeDeps, LoggerLike } from './upload-controller.ts'
 import { intakeFiles, uploadOne } from './upload-controller.ts'
+
+/** 文件扩展名角标文案（≤4 字符；无扩展名用 F）。 */
+function extOf(name: string): string {
+  const dot = name.lastIndexOf('.')
+  if (dot < 0 || dot === name.length - 1) return 'F'
+  return name.slice(dot + 1).slice(0, 4)
+}
 import * as s from './styles.ts'
 
 /** provide 通道提供的输入面（运行时由 ui-conversation 提供，类型未入 slot 契约）。 */
@@ -94,7 +101,9 @@ export function UploadRail(props: UploadRailProps): React.ReactElement | null {
           onClick={item.status === 'error' ? () => retryChip(item) : undefined}
           title={item.status === 'error' ? `${item.error ?? '上传失败'}（点击重试）` : item.name}
         >
-          {item.thumbnail !== undefined && <img style={s.thumb} src={item.thumbnail} alt="" />}
+          {item.thumbnail !== undefined
+            ? <img style={s.thumb} src={item.thumbnail} alt="" />
+            : <span style={s.extBadge}>{extOf(item.name)}</span>}
           <span style={s.name}>{item.name}</span>
           <span style={s.meta}>
             {item.status === 'uploading' ? '上传中…' : item.status === 'done' ? humanSize(item.size) : item.error}

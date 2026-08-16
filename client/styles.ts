@@ -39,16 +39,18 @@ import type { CSSProperties } from 'react'
 export const rail: CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
-  gap: 6,
-  padding: '4px 0',
+  alignItems: 'center',
+  gap: 8,
+  padding: '6px 0 2px',
 }
 
 export const chip: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 6,
-  maxWidth: 260,
-  padding: '3px 8px',
+  gap: 8,
+  maxWidth: 280,
+  height: 32,
+  padding: '0 10px',
   border: '1px solid var(--dsw-alias-border-l4)',
   borderRadius: 8,
   background: 'var(--dsw-alias-interactive-bg-hover)',
@@ -60,11 +62,28 @@ export const chipError: CSSProperties = {
 }
 
 export const thumb: CSSProperties = {
-  width: 20,
-  height: 20,
+  width: 18,
+  height: 18,
   borderRadius: 4,
   objectFit: 'cover',
   flex: 'none',
+}
+
+/** 非图片文件的类型角标：18×18 与缩略图同尺寸对齐。 */
+export const extBadge: CSSProperties = {
+  width: 18,
+  height: 18,
+  borderRadius: 4,
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'var(--dsw-alias-border-l4)',
+  color: 'var(--dsw-alias-label-caption)',
+  fontSize: 9,
+  fontWeight: 600,
+  letterSpacing: 0.3,
+  textTransform: 'uppercase',
 }
 
 export const name: CSSProperties = {
@@ -73,12 +92,14 @@ export const name: CSSProperties = {
   whiteSpace: 'nowrap',
   color: 'var(--dsw-alias-label-primary)',
   fontSize: 12,
+  lineHeight: 1,
 }
 
 export const meta: CSSProperties = {
   flex: 'none',
   color: 'var(--dsw-alias-label-caption)',
   fontSize: 12,
+  lineHeight: 1,
 }
 
 export const remove: CSSProperties = {
