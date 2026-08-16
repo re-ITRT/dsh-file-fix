@@ -1,8 +1,9 @@
 # dsh-upload-ux
 
 DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**——任何后缀的文件都能
-拖入 / 粘贴 / 点击选择，落盘到会话工作区，并注入 `@file:` 引用供 agent 用 fs 工具读取。
-完全不使用 DSH 官方图片导入链路。
+拖入 / 粘贴 / 点击选择，**字节上传到附件库**（不依赖工作区路径，服务器部署可用），
+文件清单随消息注入模型上下文，历史消息下方显示文件气泡（可下载），agent 可读取内容
+或导出到工作区。完全不使用 DSH 官方图片导入链路。
 
 ## 背景（DSH Web 原生痛点）
 
@@ -12,24 +13,43 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
 | 拖入非图片后 overlay 卡住 | drop 后「拖入图片」界面不消失 |
 | 无法点击选择文件 | 没有 file input |
 | 粘贴只支持文本 | Ctrl+V 文件无反应 |
+| 上传文件 agent 不可见 | 无文件清单注入，agent 只能猜路径（曾猜 75 步） |
 
 ## 方案
 
-- 任何文件 drop / 粘贴 / 📎 选择 → 字节上传（`uploadux/persistFile`）→ host 落盘会话工作区
-  `attachments/`（重名自动 `-1` 后缀）→ 引用文本注入输入框（**绝对路径** + 大小，如
-  `@file:C:/Users/x/workspace/attachments/a.zip（1.2 MB）`——agent 无需猜基准目录，
-  str_replace_editor/fs 工具直接可读）
-- 图片同权（不保留官方链路）：作为带缩略图的普通文件落盘；agent 需要看图时用 DSH 自带
-  `read_image` 工具（要求当前模型声明 image input）
+- 任何文件 drop / 粘贴 / 📎 选择 → 字节上传（`uploadux/persistFile`）→ host 存入**内容寻址附件库**
+  `~/.dsh/attachments/uploadux/`（sha256 去重，manifest.jsonl 索引）——与工作区完全解耦
+- 发送时（`agent/pre-step`）注入文件清单消息（role=user + plugin 来源 + notice 表单：
+  UI 只显示「📎 附件 N 个文件」一行摘要，模型读到完整清单与 attachment_id）
+- **模型侧工具**：
+  - `read_attachment`：按 attachment_id 读取内容；支持分段（offset/limit/more，默认段
+    48 KB 避开 dsh spill-policy 的 50 KB 内联阈值）；大文件自动镜像完整副本到工作区
+    `.dsh-uploadux/reads/`（官方 `read` 工具在 spill-policy 中豁免，可读全量）
+  - `place_attachment`：把附件字节导出到会话工作区任意路径（边界校验，防 `../` 逃逸）
+- 历史消息：`uploadux/files` 会话事件（ignorable）记录「消息 ↔ 文件」关联，客户端
+  shadow 官方 user 节点渲染器，在文字气泡下方渲染文件列表气泡（文件名+大小+下载链接，
+  下载走 `/plugins/dsh-upload-ux/download/<attachmentId>`，限 API token）
 - 交互照 Hermes：统一 rail 混排（缩略图降采样队列）、chip 三态（上传中/完成/失败点击重试）、
-  删除 chip 连带删工作区文件、Esc 取消拖拽、深度计数防闪烁、drop 后焦点回输入框
+  删除 chip 连带删附件、Esc 取消拖拽、深度计数防闪烁、drop 后焦点回输入框
 - 限制（插件 config 可覆盖）：单文件 50 MB、每批 20 个、批量总量 200 MB；超限整批拒绝 + 提示
 
 ## 结构
 
-- `src/` host 侧：`upload` Typert Remote 服务（persistFile / limits / remove）+ 落盘逻辑
-- `client/` 浏览器侧：document 级 drop/paste 拦截（捕获阶段）＋ rail + 📎 选择按钮
+- `src/` host 侧：`upload` Typert Remote 服务（persistFile / limits / remove / markPending /
+  listFiles）+ 附件库（内容寻址）+ 桥（session 事件监听 → 关联表 + pre-step 注入）+
+  `read_attachment` / `place_attachment` 工具 + 下载路由
+- `client/` 浏览器侧：document 级 drop/paste 拦截（捕获阶段）＋ rail + 📎 选择按钮 +
+  文件气泡（shadow `conversation.chat.node` 的 user/steering 键）
 - `scripts/build-client.mjs` client bundle 构建（esbuild CJS + `__ModuleLoader__` 外壳，zod 内联）
+- `scripts/repair-sessions.mjs` 会话日志修复工具（帧级 zstd 解压 → 清洗 → 重压；曾用于清除
+  早期版本误存进日志的 system 角色消息）
+
+## 已知平台限制（win32）
+
+- dsh spill-policy 阈值 50 KB：纯文本工具结果超过即替换为「头尾预览 + spill 路径」，
+  且 spill 定位是 Windows 路径（agent 的 bash 为 Linux 语义读不了）——插件已通过
+  48 KB 默认段 + 工作区镜像规避
+- 工具集无 shell 执行能力时 agent 无法解压/运行文件（环境问题，非插件）
 
 ## 开发环境（官方教程路径：源码 checkout + 干净 profile）
 

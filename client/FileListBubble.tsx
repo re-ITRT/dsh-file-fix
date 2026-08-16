@@ -21,7 +21,6 @@ export function downloadUrl(attachmentId: string): string {
 
 /** 历史消息下方：文件列表（附件机制，工作区无关）。 */
 export function FileListBubble({ node }: FileListBubbleProps): React.ReactElement {
-  ;(window as unknown as Record<string, unknown>).__uploaduxBubbleRendered = true
   const { files } = node.data
   return (
     <div style={s.bubble} aria-label="附件文件列表">

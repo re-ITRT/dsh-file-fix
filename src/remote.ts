@@ -3,8 +3,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Config } from './config.ts'
-import { debugLog } from './debug-log.ts'
-import { sanitizeName } from './name.ts'
+import { mediaTypeOf, sanitizeName } from './name.ts'
 import type { FilesAttachedEntry } from './types.ts'
 import type { FileAttachmentStore } from './store.ts'
 import type {
@@ -52,7 +51,6 @@ export class UploadService extends TypertRemoteService {
   @Remote('persistFile')
   async persistFile(request: PersistFileRequest): Promise<PersistFileOutcome> {
     const started = Date.now()
-    debugLog('persistFile entry name=', request.name, 'session=', request.sessionId)
     const bytes = Buffer.from(request.data, 'base64')
 
     if (bytes.byteLength === 0) {
@@ -71,15 +69,17 @@ export class UploadService extends TypertRemoteService {
       return { ok: false, code: 'invalid-name' }
     }
 
+    const mediaType = mediaTypeOf(request)
+
     this.ctx.logger.info(
       '[dsh-upload-ux] persistFile session=%s name=%s mediaType=%s bytes=%d',
-      request.sessionId, name, request.mediaType, bytes.byteLength,
+      request.sessionId, name, mediaType, bytes.byteLength,
     )
 
     try {
       const file = await this.store.save({
         name,
-        mediaType: request.mediaType,
+        mediaType,
         sessionId: request.sessionId,
         bytes,
       })
@@ -87,7 +87,6 @@ export class UploadService extends TypertRemoteService {
         '[dsh-upload-ux] persistFile ok id=%s name=%s %dms',
         file.attachmentId, name, Date.now() - started,
       )
-      debugLog('persistFile ok id=', file.attachmentId, 'name=', name)
       return { ok: true, file }
     } catch (error) {
       this.ctx.logger.error('[dsh-upload-ux] persistFile write failed: %o', error)
@@ -117,7 +116,6 @@ export class UploadService extends TypertRemoteService {
       items.push({ messageId, seq: entry.seq, files: entry.files })
     }
     void request
-    debugLog('listFiles session=', request.sessionId, 'items=', items.length)
     return { ok: true, items }
   }
 
@@ -125,7 +123,6 @@ export class UploadService extends TypertRemoteService {
   async markPending(request: MarkPendingRequest): Promise<MarkPendingOutcome> {
     const existing = this.pending.get(request.sessionId) ?? []
     this.pending.set(request.sessionId, [...existing, ...request.files])
-    debugLog('markPending session=', request.sessionId, 'files=', request.files.length)
     this.ctx.logger.info(
       '[dsh-upload-ux] markPending session=%s files=%d',
       request.sessionId, request.files.length,

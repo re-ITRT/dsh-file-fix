@@ -37,7 +37,6 @@ export function UploadRail(props: UploadRailProps): React.ReactElement | null {
   depsRef.current = { sessionId, remote: upload, actions, getLimits, logger }
 
   useEffect(() => {
-    ;(window as unknown as Record<string, unknown>).__uploaduxRailMounted = true
     return installFileIntercept({
       canAccept: () => true,
       onFiles: files => { void intakeFiles(depsRef.current!, files, 'drop') },

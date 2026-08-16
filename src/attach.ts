@@ -4,7 +4,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import type { Message, UserMessage } from '@deepseek-ai/dsh-llm'
-import { debugLog } from './debug-log.ts'
 import type { UploadService } from './remote.ts'
 import type { FilesAttachedEventData, UploadedFile } from './types.ts'
 
@@ -72,7 +71,6 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
   // 注册在 root：session/event 沿 emitCtx 祖先链派发，root 必在链上；
   // 插件自身的 fiber ctx 可能是兄弟子树，收不到（实测）。listener 仍归属本 fiber，随插件卸载。
   const root = ctx.root
-  debugLog('bridge installing on ctx.root, root===ctx ->', String(root === ctx))
 
   const rebuildFor = async (sessionId: SessionId): Promise<void> => {
     try {
@@ -93,9 +91,7 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
   const eventDue = new Set<string>()
 
   root.on('session/event', (session: Session, event: SessionEvent) => {
-    debugLog('session/event type=', event.type)
     if (!isUserSurfaceMessage(event)) return
-    debugLog('user surface message seen, session=', String(session.id))
     const sessionId = String(session.id)
     const messageId = messageIdOf(event)
     const entry = attached.get(messageId)
@@ -127,11 +123,9 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
           data,
           ignorable: true,
         } as SessionEvent])
-        debugLog('files event appended ok (attempt', String(attempt) + ')', 'messageId=', messageId)
         return
       } catch (error) {
         if (attempt === 149) {
-          debugLog('append files event FAILED after retries:', String(error))
           return
         }
         await new Promise(resolve => setTimeout(resolve, 100))
@@ -164,7 +158,6 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
     }
     const sys = systemMessage(fileListSystemText(files), String(anchor.id), files)
     const entered = decision.messages.toSpliced(lastIndex + 1, 0, sys as UserMessage)
-    debugLog('pre-step injected file list session=', sessionId, 'files=', files.length)
     return { kind: 'enter', messages: entered }
   })
 

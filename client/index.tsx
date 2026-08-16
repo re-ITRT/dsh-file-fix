@@ -16,12 +16,8 @@ export const name = 'dsh-upload-ux'
 export const inject = ['slots', 'remote']
 
 export async function apply(ctx: ClientContext): Promise<void> {
-  const stage = (s: string): void => {
-    ;(window as unknown as Record<string, unknown>).__uploaduxStage = s
-  }
-  stage('start')
+  // 上传工具面：预检 + 字节上传 + 挂载，注入注入面（rail/picker/history 共享）。
   await ctx.remote.$mount(UPLOAD_TYPERT_REMOTE)
-  stage('remote-mounted')
   // 命名空间服务由 $mount 注册为 remote.uploadux —— 用 ctx.get 读取。
   const upload = ctx.get('remote.uploadux') as UploadRemote
 
@@ -65,7 +61,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, UserNodeWithFiles as unknown as (props: unknown) => ReactElement | null)
     return () => { disposeUser(); disposeSteering() }
   })
-  stage('user-node-shadowed')
 
   ctx.slots.inject('conversation.input.dock', () => {
     const dispose = ctx.slots.register({
@@ -77,7 +72,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, UploadRail)
     return () => { dispose() }
   })
-  stage('rail-registered')
 
   ctx.slots.inject('conversation.input.left', () => {
     const dispose = ctx.slots.register({
@@ -89,8 +83,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, UploadPickerButton)
     return () => { dispose() }
   })
-  stage('picker-registered')
 
   ctx.logger.info('[dsh-upload-ux] client loaded: intercept + rail + picker + file bubbles')
-  ;(window as unknown as Record<string, unknown>).__uploaduxApplyDone = true
 }
