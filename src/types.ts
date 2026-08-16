@@ -1,54 +1,80 @@
-/** dsh-upload-ux 线类型：upload 命名空间三个端点的请求/结果。 */
+/** dsh-upload-ux 线类型：uploadux 命名空间端点 + 会话事件载荷。 */
 
-/** 部署级上传限制（客户端预检 + 设置展示共用同一份）。 */
+/** 部署级上传限制（客户端预检与展示共用）。 */
 export interface UploadLimits {
-  /** 单文件字节上限。 */
   maxFileBytes: number
-  /** 单批文件数上限。 */
   maxFilesPerBatch: number
-  /** 单批总字节上限。 */
   maxBatchBytes: number
 }
 
-/** upload/persistFile 请求：base64 编码的文件字节 + 元数据。 */
-export interface PersistFileRequest {
-  /** 目标会话 id（host 用它解析工作区目录）。 */
-  sessionId: string
-  /** 原始文件名（host 清洗：剥路径、去控制字符、截断）。 */
+/** 一个已入附件库的文件。attachmentId = 内容寻址 sha256。 */
+export interface UploadedFile {
+  attachmentId: string
   name: string
-  /** 浏览器声明的 MIME 类型，仅记录不做校验。 */
   mediaType: string
-  /** base64 编码的文件字节。 */
+  size: number
+}
+
+/** uploadux/persistFile 请求：base64 字节 + 元数据。 */
+export interface PersistFileRequest {
+  sessionId: string
+  name: string
+  mediaType: string
   data: string
 }
 
-/** persistFile 的业务结果：成功带相对+绝对路径（引用注入用绝对路径，agent 免猜基准目录），失败带稳定 code。 */
-export type PersistFileOutcome =
-  | { ok: true; relPath: string; absPath: string; size: number }
-  | { ok: false; code: PersistFailureCode; detail?: string }
-
 export type PersistFailureCode =
-  | 'session-not-found'
-  | 'no-workspace'
+  | 'empty'
   | 'too-large'
   | 'invalid-name'
-  | 'empty'
   | 'write-failed'
 
-/** upload/remove 请求。 */
+/** persistFile 结果：成功返回附件描述。 */
+export type PersistFileOutcome =
+  | { ok: true; file: UploadedFile }
+  | { ok: false; code: PersistFailureCode; detail?: string }
+
+/** uploadux/removeFile 请求。 */
 export interface RemoveFileRequest {
   sessionId: string
-  /** 工作区内相对路径（必须由 persistFile 返回过）。 */
-  relPath: string
+  attachmentId: string
 }
 
-/** remove 的业务结果。 */
 export type RemoveFileOutcome =
   | { ok: true; absent: boolean }
-  | { ok: false; code: RemoveFailureCode; detail?: string }
+  | { ok: false; code: 'invalid-path' | 'remove-failed'; detail?: string }
 
-export type RemoveFailureCode =
-  | 'session-not-found'
-  | 'no-workspace'
-  | 'invalid-path'
-  | 'remove-failed'
+/** uploadux/markPending 请求：把已上传文件挂到会话的下一次用户发送。 */
+export interface MarkPendingRequest {
+  sessionId: string
+  files: UploadedFile[]
+}
+
+export type MarkPendingOutcome = { ok: true } | { ok: false; code: 'session-not-found' }
+
+/** uploadux/unmarkPending 请求：发送前移除 rail 里的文件时撤销挂载。 */
+export interface UnmarkPendingRequest {
+  sessionId: string
+  attachmentId: string
+}
+
+export type UnmarkPendingOutcome = { ok: true } | { ok: false; code: 'session-not-found' }
+
+/** 自定义会话事件：某条用户消息携带的文件列表（ignorable 标记保证跨版本重放安全）。 */
+export interface FilesAttachedEventData {
+  messageId: string
+  files: UploadedFile[]
+}
+
+/** 文件挂载条目（listFiles 结果单元）。 */
+export interface FilesAttachedEntry {
+  messageId: string
+  seq: number
+  files: UploadedFile[]
+}
+
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    'uploadux/files': FilesAttachedEventData
+  }
+}

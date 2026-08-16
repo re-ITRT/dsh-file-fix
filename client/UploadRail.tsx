@@ -1,4 +1,4 @@
-/** 统一上传 rail：输入栏上方（hero 与 docked 两种态都渲染），图片与文件混排，三态 chip + 删除。 */
+/** 统一上传 rail：输入栏上方，三态 chip + 删除；发送后自动清空（文件已随消息挂载）。 */
 
 import { useEffect, useRef } from 'react'
 import type { UploadLimits } from '../src/types.ts'
@@ -15,61 +15,58 @@ interface DraftInput {
   draft: string
 }
 
-interface InputActionsLike {
-  setDraft: (text: string) => void
-}
-
 export interface UploadRailProps {
   sessionId: string
   useStore: <S>(selector: (state: UploadState) => S) => S
   actions: BakedUploadActions
-  /** provide 通道的输入钩子/动作：运行时必有，类型声明为可选以通过 slot 契约检查。 */
   useInput?: <S>(selector: (state: DraftInput) => S) => S
-  inputActions?: InputActionsLike
-  /** inject 面：upload 命名空间 + 限制读取 + 日志（apply 闭包内共享）。 */
   upload: UploadRemote
   getLimits: () => UploadLimits | null
   logger: LoggerLike
 }
 
-export function UploadRail(props: UploadRailProps): JSX.Element | null {
-  const { sessionId, useStore, actions, useInput, inputActions, upload, getLimits, logger } = props
+export function UploadRail(props: UploadRailProps): React.ReactElement | null {
+  const { sessionId, useStore, actions, useInput, upload, getLimits, logger } = props
   const items = useStore(state => state.items)
   const notice = useStore(state => state.notice)
   const draft = useInput?.(state => state.draft) ?? ''
+  const hadDraft = useRef(false)
 
-  // 事件发生时读最新快照：deps 用 ref 刷新，document 监听只装一次。
+  // 稳定 deps 引用（监听器只装一次，draft 变化不重建）。
   const depsRef = useRef<IntakeDeps | null>(null)
-  depsRef.current = {
-    sessionId,
-    remote: upload,
-    actions,
-    getLimits,
-    getDraft: () => draft,
-    setDraft: text => { inputActions?.setDraft(text) },
-    logger,
-  }
-
-  useEffect(() => installFileIntercept({
-    canAccept: () => true,
-    onFiles: files => {
-      const deps = depsRef.current
-      if (deps !== null) void intakeFiles(deps, files, 'drop')
-    },
-  }), [])
+  depsRef.current = { sessionId, remote: upload, actions, getLimits, logger }
 
   useEffect(() => {
+    ;(window as unknown as Record<string, unknown>).__uploaduxRailMounted = true
+    return installFileIntercept({
+      canAccept: () => true,
+      onFiles: files => { void intakeFiles(depsRef.current!, files, 'drop') },
+    })
+  }, [])
+
+  // 发送即清空：草稿从非空变空 = 本次发送已提交，文件已随消息挂载。
+  useEffect(() => {
+    if (hadDraft.current && draft === '') {
+      actions.clearAll()
+      logger.info('[dsh-upload-ux] draft committed — rail cleared')
+    }
+    hadDraft.current = draft !== ''
+  }, [draft])
+
+  // notice 自动清。
+  useEffect(() => {
     if (notice === null) return
-    const timer = setTimeout(() => { actions.setNotice(null) }, 5000)
+    const timer = setTimeout(() => actions.setNotice(null), 5000)
     return () => clearTimeout(timer)
-  }, [notice, actions])
+  }, [notice])
 
   const removeChip = (item: UploadItem): void => {
     actions.removeItem(item.id)
-    logger.info('[dsh-upload-ux] chip removed %s -> remote %s', item.name, item.relPath ?? '(not uploaded)')
-    if (item.relPath !== undefined) {
-      void upload.removeFile({ sessionId, relPath: item.relPath }).then(result => {
-        if (!result.ok) logger.warn('[dsh-upload-ux] remote remove failed %s: %o', item.relPath, result.error)
+    logger.info('[dsh-upload-ux] chip removed %s attachment=%s', item.name, item.attachmentId ?? '(pending)')
+    if (item.attachmentId !== undefined) {
+      void upload.unmarkPending({ sessionId, attachmentId: item.attachmentId }).catch(() => {})
+      void upload.removeFile({ sessionId, attachmentId: item.attachmentId }).then(result => {
+        if (!result.ok) logger.warn('[dsh-upload-ux] remote removeFile failed %s: %o', item.attachmentId, result.error)
       })
     }
   }
@@ -80,7 +77,11 @@ export function UploadRail(props: UploadRailProps): JSX.Element | null {
     logger.info('[dsh-upload-ux] upload retry %s', item.name)
     actions.removeItem(item.id)
     actions.addUploading({ ...item, status: 'uploading', error: undefined })
-    void uploadOne(deps, { ...item, status: 'uploading' }, 'retry')
+    void uploadOne(deps, { ...item, status: 'uploading' }, 'retry').then(file => {
+      if (file !== undefined) {
+        void deps.remote.markPending({ sessionId: deps.sessionId, files: [file] }).catch(() => {})
+      }
+    })
   }
 
   if (items.length === 0 && notice === null) return null

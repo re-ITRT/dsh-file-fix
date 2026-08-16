@@ -1,35 +1,43 @@
-/** uploadux 命名空间的 Typert Remote 服务：persistFile / limits / remove。 */
+/** uploadux 命名空间 Typert Remote 服务：persistFile / limits / removeFile / markPending。 */
 
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import type { Config } from './config.ts'
-import { persistFileBytes, removeFileBytes } from './persist.ts'
+import { debugLog } from './debug-log.ts'
+import { sanitizeName } from './name.ts'
+import type { FilesAttachedEntry } from './types.ts'
+import type { FileAttachmentStore } from './store.ts'
 import type {
+  MarkPendingOutcome,
+  MarkPendingRequest,
   PersistFileOutcome,
   PersistFileRequest,
   RemoveFileOutcome,
   RemoveFileRequest,
+  UnmarkPendingOutcome,
+  UnmarkPendingRequest,
   UploadLimits,
+  UploadedFile,
 } from './types.ts'
 
-/** 会话 id → 工作区目录的解析：从持久化 header 里查 cwd。 */
-async function workspaceOf(
-  persistence: SessionPersistence,
-  sessionId: string,
-): Promise<string | undefined> {
-  const headers = await persistence.list()
-  return headers.find(header => String(header.id) === sessionId)?.cwd
-}
-
 export class UploadService extends TypertRemoteService {
-  static inject = ['sessionPersistence']
+  static inject = ['uploaduxStore']
+
+/** 已挂载文件：messageId → {seq, files}（seq 供客户端按用户消息定位气泡）。 */
+  readonly attached = new Map<string, { seq: number; files: UploadedFile[] }>()
+
+  /** 待挂载文件：会话下一次 user 消息进入 inbox 时消费。 */
+  readonly pending = new Map<string, UploadedFile[]>()
 
   constructor(
     ctx: Context,
     readonly config: Config,
   ) {
     super(ctx, 'uploadux')
+  }
+
+  get store(): FileAttachmentStore {
+    return this.ctx.uploaduxStore
   }
 
   @Remote('limits')
@@ -44,71 +52,103 @@ export class UploadService extends TypertRemoteService {
   @Remote('persistFile')
   async persistFile(request: PersistFileRequest): Promise<PersistFileOutcome> {
     const started = Date.now()
+    debugLog('persistFile entry name=', request.name, 'session=', request.sessionId)
     const bytes = Buffer.from(request.data, 'base64')
-    const ctx = this.ctx
 
     if (bytes.byteLength === 0) {
-      ctx.logger.warn('[dsh-upload-ux] persistFile rejected: EMPTY name=%s', request.name)
+      this.ctx.logger.warn('[dsh-upload-ux] persistFile rejected: EMPTY name=%s', request.name)
       return { ok: false, code: 'empty' }
     }
     if (bytes.byteLength > this.config.maxFileBytes) {
-      ctx.logger.warn(
+      this.ctx.logger.warn(
         '[dsh-upload-ux] persistFile rejected: TOO_LARGE name=%s bytes=%d limit=%d',
         request.name, bytes.byteLength, this.config.maxFileBytes,
       )
       return { ok: false, code: 'too-large', detail: `max ${this.config.maxFileBytes} bytes` }
     }
-
-    let cwd: string | undefined
-    try {
-      cwd = await workspaceOf(this.ctx.sessionPersistence, request.sessionId)
-    } catch (error) {
-      ctx.logger.error('[dsh-upload-ux] persistFile session lookup failed: %o', error)
-      return { ok: false, code: 'session-not-found' }
-    }
-    if (cwd === undefined) {
-      ctx.logger.warn('[dsh-upload-ux] persistFile rejected: SESSION_NOT_FOUND session=%s', request.sessionId)
-      return { ok: false, code: 'session-not-found' }
+    const name = sanitizeName(request.name)
+    if (name === '') {
+      return { ok: false, code: 'invalid-name' }
     }
 
-    ctx.logger.info(
+    this.ctx.logger.info(
       '[dsh-upload-ux] persistFile session=%s name=%s mediaType=%s bytes=%d',
-      request.sessionId, request.name, request.mediaType, bytes.byteLength,
+      request.sessionId, name, request.mediaType, bytes.byteLength,
     )
 
     try {
-      const result = await persistFileBytes(cwd, this.config.dirName, request.name, request.data)
-      ctx.logger.info(
-        '[dsh-upload-ux] persistFile ok -> %s (%d bytes) in %dms',
-        result.relPath, result.size, Date.now() - started,
+      const file = await this.store.save({
+        name,
+        mediaType: request.mediaType,
+        sessionId: request.sessionId,
+        bytes,
+      })
+      this.ctx.logger.info(
+        '[dsh-upload-ux] persistFile ok id=%s name=%s %dms',
+        file.attachmentId, name, Date.now() - started,
       )
-      return { ok: true, ...result }
+      debugLog('persistFile ok id=', file.attachmentId, 'name=', name)
+      return { ok: true, file }
     } catch (error) {
-      ctx.logger.error('[dsh-upload-ux] persistFile write failed: %o', error)
+      this.ctx.logger.error('[dsh-upload-ux] persistFile write failed: %o', error)
       return { ok: false, code: 'write-failed', detail: (error as Error).message }
     }
   }
 
   @Remote('removeFile')
   async removeFile(request: RemoveFileRequest): Promise<RemoveFileOutcome> {
-    let cwd: string | undefined
     try {
-      cwd = await workspaceOf(this.ctx.sessionPersistence, request.sessionId)
+      const removed = await this.store.remove(request.attachmentId)
+      this.ctx.logger.info(
+        '[dsh-upload-ux] removeFile %s -> %s',
+        request.attachmentId, removed ? 'ok' : 'not-found',
+      )
+      return { ok: true, absent: !removed }
     } catch (error) {
-      this.ctx.logger.error('[dsh-upload-ux] remove session lookup failed: %o', error)
-      return { ok: false, code: 'session-not-found' }
-    }
-    if (cwd === undefined) {
-      return { ok: false, code: 'session-not-found' }
-    }
-
-    try {
-      const ok = await removeFileBytes(cwd, this.config.dirName, request.relPath)
-      this.ctx.logger.info('[dsh-upload-ux] remove %s -> %s', request.relPath, ok ? 'ok' : 'not-found')
-      return { ok: true, absent: !ok }
-    } catch (error) {
-      this.ctx.logger.error('[dsh-upload-ux] remove %s failed: %o', request.relPath, error)
+      this.ctx.logger.error('[dsh-upload-ux] removeFile %s failed: %o', request.attachmentId, error)
       return { ok: false, code: 'remove-failed', detail: (error as Error).message }
     }
+  }
+
+  @Remote('listFiles')
+  async listFiles(request: { sessionId: string }): Promise<{ ok: true; items: FilesAttachedEntry[] }> {
+    const items: FilesAttachedEntry[] = []
+    for (const [messageId, entry] of this.attached) {
+      items.push({ messageId, seq: entry.seq, files: entry.files })
+    }
+    void request
+    debugLog('listFiles session=', request.sessionId, 'items=', items.length)
+    return { ok: true, items }
+  }
+
+  @Remote('markPending')
+  async markPending(request: MarkPendingRequest): Promise<MarkPendingOutcome> {
+    const existing = this.pending.get(request.sessionId) ?? []
+    this.pending.set(request.sessionId, [...existing, ...request.files])
+    debugLog('markPending session=', request.sessionId, 'files=', request.files.length)
+    this.ctx.logger.info(
+      '[dsh-upload-ux] markPending session=%s files=%d',
+      request.sessionId, request.files.length,
+    )
+    return { ok: true }
+  }
+
+  @Remote('unmarkPending')
+  async unmarkPending(request: UnmarkPendingRequest): Promise<UnmarkPendingOutcome> {
+    const existing = this.pending.get(request.sessionId)
+    if (existing === undefined) return { ok: true }
+    this.pending.set(request.sessionId, existing.filter(file => file.attachmentId !== request.attachmentId))
+    this.ctx.logger.info(
+      '[dsh-upload-ux] unmarkPending session=%s attachment=%s',
+      request.sessionId, request.attachmentId,
+    )
+    return { ok: true }
+  }
+
+  /** 取走会话的待挂文件（入 inbox 时调用）。 */
+  takePending(sessionId: string): UploadedFile[] {
+    const files = this.pending.get(sessionId) ?? []
+    this.pending.delete(sessionId)
+    return files
   }
 }

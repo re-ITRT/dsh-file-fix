@@ -1,6 +1,6 @@
-/** 上传管线：预检 → 读字节 → persistFile → 状态回写 + 引用注入。rail 与 picker 共用。 */
+/** 上传管线：预检 → 读字节 → persistFile 入附件库 → markPending 挂到下一次发送。 */
 
-import type { UploadLimits } from '../src/types.ts'
+import type { UploadLimits, UploadedFile } from '../src/types.ts'
 import type { UploadRemote } from './remote.ts'
 import type { BakedUploadActions, UploadItem } from './store.ts'
 import { downscaleThumbnail, humanSize } from './thumbnail.ts'
@@ -16,9 +16,6 @@ export interface IntakeDeps {
   remote: UploadRemote
   actions: BakedUploadActions
   getLimits: () => UploadLimits | null
-  /** 读当前草稿（事件发生时取快照）。 */
-  getDraft: () => string
-  setDraft: (text: string) => void
   logger: LoggerLike
 }
 
@@ -36,23 +33,19 @@ function codeToText(code: string): string {
     case 'too-large': return '文件超过大小限制'
     case 'empty': return '文件为空'
     case 'invalid-name': return '文件名无效'
-    case 'session-not-found': return '会话不存在'
-    case 'no-workspace': return '会话没有工作区'
     case 'write-failed': return '写入失败'
-    case 'invalid-path': return '路径无效'
-    case 'remove-failed': return '删除失败'
     default: return code
   }
 }
 
 /**
- * 单个文件的上传：远程落盘 → 回写状态。重试复用同一 item 的数据。
+ * 单个文件的上传：字节入附件库 → 回写 attachmentId。重试复用同一 item 数据。
  */
 export async function uploadOne(
   deps: IntakeDeps,
   item: UploadItem,
   via: string,
-): Promise<void> {
+): Promise<UploadedFile | undefined> {
   deps.logger.info('[dsh-upload-ux] upload start %s (%s)', item.name, humanSize(item.size))
   const started = Date.now()
   try {
@@ -66,36 +59,34 @@ export async function uploadOne(
       const code = (result.error as { code?: string }).code ?? 'remote-failure'
       deps.actions.markError(item.id, codeToText(code))
       deps.logger.warn('[dsh-upload-ux] upload failed %s: %s', item.name, code)
-      return
+      return undefined
     }
     const outcome = result.value
     if (!outcome.ok) {
       deps.actions.markError(item.id, codeToText(outcome.code))
       deps.logger.warn('[dsh-upload-ux] upload failed %s: %s', item.name, outcome.code)
-      return
+      return undefined
     }
-    const { relPath, absPath, size } = outcome
-    deps.actions.markDone(item.id, relPath, size)
+    deps.actions.markDone(item.id, outcome.file.attachmentId, outcome.file.size)
     deps.logger.info(
       '[dsh-upload-ux] upload ok %s -> %s %dms via=%s',
-      item.name, relPath, Date.now() - started, via,
+      item.name, outcome.file.attachmentId, Date.now() - started, via,
     )
-    // 引用注入：绝对路径（agent 无需猜测基准目录，直接可读）+ 大小。
-    const refText = `@file:${absPath.replaceAll('\\', '/')}（${humanSize(size)}）`
-    const draft = deps.getDraft()
-    deps.setDraft(draft === '' ? refText : `${draft}\n${refText}`)
-    deps.logger.info('[dsh-upload-ux] ref injected: %s', refText)
+    return outcome.file
   } catch (error) {
     deps.actions.markError(item.id, codeToText('write-failed'))
     deps.logger.error('[dsh-upload-ux] upload exception %s: %o', item.name, error)
+    return undefined
   }
 }
 
 /**
- * 整批入口：限制预检（超限整批拒绝）→ 逐文件读字节入 rail → 逐个上传。
+ * 整批入口：限制预检（超限整批拒绝）→ 逐文件读字节入 rail → 逐个上传，
+ * 成功后挂载到会话的下一次用户发送。
  */
 export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via: string): Promise<void> {
   const { actions, getLimits, logger } = deps
+  console.log('[dsh-upload-ux:debug] intakeFiles', via, files.length, files.map(f => f.name).join(','))
   logger.info(
     '[dsh-upload-ux] intake files=%d images=%d others=%d via=%s',
     files.length,
@@ -107,27 +98,25 @@ export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via:
   const limits = getLimits()
   if (limits !== null) {
     if (files.length > limits.maxFilesPerBatch) {
-      const notice = `一次最多上传 ${limits.maxFilesPerBatch} 个文件`
-      actions.setNotice(notice)
+      actions.setNotice(`一次最多上传 ${limits.maxFilesPerBatch} 个文件`)
       logger.warn('[dsh-upload-ux] intake rejected: TOO_MANY files=%d limit=%d', files.length, limits.maxFilesPerBatch)
       return
     }
     const oversize = files.find(file => file.size > limits.maxFileBytes)
     if (oversize !== undefined) {
-      const notice = `文件超过大小限制（${humanSize(limits.maxFileBytes)}）`
-      actions.setNotice(notice)
+      actions.setNotice(`文件超过大小限制（${humanSize(limits.maxFileBytes)}）`)
       logger.warn('[dsh-upload-ux] intake rejected: TOO_LARGE name=%s', oversize.name)
       return
     }
     const total = files.reduce((sum, file) => sum + file.size, 0)
     if (total > limits.maxBatchBytes) {
-      const notice = `批量总大小超过限制（${humanSize(limits.maxBatchBytes)}）`
-      actions.setNotice(notice)
+      actions.setNotice(`批量总大小超过限制（${humanSize(limits.maxBatchBytes)}）`)
       logger.warn('[dsh-upload-ux] intake rejected: BATCH_TOO_LARGE bytes=%d', total)
       return
     }
   }
 
+  const uploaded: UploadedFile[] = []
   for (const file of files) {
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const data = await readAsDataUrl(file).catch(() => '')
@@ -143,6 +132,18 @@ export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via:
         if (thumbnail !== '') actions.setThumbnail(id, thumbnail)
       })
     }
-    void uploadOne(deps, { id, name: file.name, size: file.size, mediaType: file.type, data, status: 'uploading' }, via)
+    const result = await uploadOne(deps, { id, name: file.name, size: file.size, mediaType: file.type, data, status: 'uploading' }, via)
+    if (result !== undefined) uploaded.push(result)
+  }
+
+  if (uploaded.length > 0) {
+    console.log('[dsh-upload-ux:debug] calling markPending', via, uploaded.length)
+    void deps.remote.markPending({ sessionId: deps.sessionId, files: uploaded }).then(result => {
+      console.log('[dsh-upload-ux:debug] markPending result', result.ok ? 'ok' : JSON.stringify(result.error))
+      logger.info(
+        '[dsh-upload-ux] markPending %s: %d file(s) -> %s',
+        via, uploaded.length, result.ok ? 'ok' : `failed ${result.error}`,
+      )
+    })
   }
 }

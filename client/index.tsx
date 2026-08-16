@@ -1,32 +1,37 @@
-/** dsh-upload-ux 浏览器半：挂载 uploadux Remote、拦截 drop/paste、注册 rail + 选择按钮。 */
+/** dsh-upload-ux 浏览器半：Remote 挂载、拦截、rail + 选择按钮、历史文件气泡节点。 */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-// 类型合并：conversation.input.dock / conversation.input.left 两个 slot 键。
+import type { ReactElement } from 'react'
+// 类型合并：slot 键 + ChatNodeDataMap 扩展。
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { UploadLimits } from '../src/types.ts'
 import { UPLOAD_TYPERT_REMOTE, type UploadRemote } from './remote.ts'
 import { createUploadStore } from './store.ts'
 import { UploadPickerButton } from './UploadPickerButton.tsx'
 import { UploadRail } from './UploadRail.tsx'
+import { UserNodeWithFiles, setUserNodeUpload } from './UserNodeWithFiles.tsx'
 
 export const name = 'dsh-upload-ux'
 
-/** 依赖：slot 注册表 + 客户端 Remote 网关。 */
 export const inject = ['slots', 'remote']
 
 export async function apply(ctx: ClientContext): Promise<void> {
+  const stage = (s: string): void => {
+    ;(window as unknown as Record<string, unknown>).__uploaduxStage = s
+  }
+  stage('start')
   await ctx.remote.$mount(UPLOAD_TYPERT_REMOTE)
-  // 命名空间服务由 $mount 注册为 remote.uploadux —— 用 ctx.get 读取
-  // （属性代理只允许注入声明的服务，这里是自己挂载的动态服务）。
+  stage('remote-mounted')
+  // 命名空间服务由 $mount 注册为 remote.uploadux —— 用 ctx.get 读取。
   const upload = ctx.get('remote.uploadux') as UploadRemote
 
-  // 限制：启动时拉一次，失败时保持 null（预检跳过，由 host 端拒绝兜底）。
+  // 限制：启动时拉一次，失败保持 null（预检跳过，由 host 端拒绝兜底）。
   const limitsBox: { value: UploadLimits | null } = { value: null }
   void upload.limits().then(result => {
     if (result.ok) {
       limitsBox.value = result.value
       ctx.logger.info(
-        '[dsh-upload-ux] limits loaded: maxFileBytes=%d maxFilesPerBatch=%d maxBatchBytes=%d',
+        '[dsh-upload-ux] limits loaded: %d bytes/file, %d files/batch, %d bytes/batch',
         result.value.maxFileBytes, result.value.maxFilesPerBatch, result.value.maxBatchBytes,
       )
     } else {
@@ -36,13 +41,31 @@ export async function apply(ctx: ClientContext): Promise<void> {
     ctx.logger.warn('[dsh-upload-ux] limits fetch failed: %o', error)
   })
 
-  // 两个注册共享同一个 store handle（同 scope 同一实例），共享 inject 面。
+  // rail + picker 共享同一个 store handle（同 scope 同一实例）与 inject 面。
   const store = createUploadStore()
   const share = {
     upload,
     getLimits: () => limitsBox.value,
     logger: ctx.logger,
   }
+
+  // 历史气泡：shadow 官方 user/steering 节点渲染器（priority -1 胜出），包装官方组件 + 文件列表。
+  // keyed 注册不支持 inject —— upload 经模块级引用传给包装组件。
+  setUserNodeUpload(upload)
+  ctx.slots.inject('conversation.chat.node', () => {
+    const disposeUser = ctx.slots.register({
+      name: 'conversation.chat.node',
+      key: 'user',
+      priority: -1,
+    }, UserNodeWithFiles as unknown as (props: unknown) => ReactElement | null)
+    const disposeSteering = ctx.slots.register({
+      name: 'conversation.chat.node',
+      key: 'steering',
+      priority: -1,
+    }, UserNodeWithFiles as unknown as (props: unknown) => ReactElement | null)
+    return () => { disposeUser(); disposeSteering() }
+  })
+  stage('user-node-shadowed')
 
   ctx.slots.inject('conversation.input.dock', () => {
     const dispose = ctx.slots.register({
@@ -54,6 +77,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, UploadRail)
     return () => { dispose() }
   })
+  stage('rail-registered')
 
   ctx.slots.inject('conversation.input.left', () => {
     const dispose = ctx.slots.register({
@@ -65,6 +89,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, UploadPickerButton)
     return () => { dispose() }
   })
+  stage('picker-registered')
 
-  ctx.logger.info('[dsh-upload-ux] client loaded: intercept + rail + picker registered')
+  ctx.logger.info('[dsh-upload-ux] client loaded: intercept + rail + picker + file bubbles')
+  ;(window as unknown as Record<string, unknown>).__uploaduxApplyDone = true
 }

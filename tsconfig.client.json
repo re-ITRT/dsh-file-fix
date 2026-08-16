@@ -9,7 +9,10 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "types": []
+    "types": [],
+    "ignoreDeprecations": "6.0"
   },
-  "include": ["client"]
+  "include": [
+    "client"
+  ]
 }
