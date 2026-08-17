@@ -1,0 +1,6 @@
+# dsh-file-fix bundle patch: 统一文件导入体系的插件树定义。
+# npm 安装后，dsh plugin add/update 依据 package.json 的 dsh.bundle.patch
+# 把本插件加入 profile 的 bundles 层，从而被加载。
+- insert:
+    - id: upload
+      name: 'dsh-file-fix'
