@@ -10,6 +10,7 @@ import { createUploadStore } from './store.ts'
 import { UploadPickerButton } from './UploadPickerButton.tsx'
 import { UploadRail } from './UploadRail.tsx'
 import { UserNodeWithFiles, setUserNodeUpload } from './UserNodeWithFiles.tsx'
+import { installVisionNavIcon } from './nav-icon.ts'
 import { VisionSettingsSection, setVisionUpload } from './VisionSettingsSection.tsx'
 
 export const name = 'dsh-file-fix'
@@ -97,5 +98,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
         return () => { dispose() }
       })
 
-      ctx.logger.info('[dsh-file-fix] client loaded: intercept + rail + picker + file bubbles + vision settings')
+      // 视觉辅助设置导航图标补丁（外壳 navIcon 无扩展点 → MutationObserver + CSS mask）。
+  installVisionNavIcon()
+
+  ctx.logger.info('[dsh-file-fix] client loaded: intercept + rail + picker + file bubbles + vision settings')
 }
