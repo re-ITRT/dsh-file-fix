@@ -2,7 +2,7 @@
 
 import { useRef } from 'react'
 import type { ChangeEvent } from 'react'
-import { IconPlusOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconPaperclipOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UploadLimits } from '../src/types.ts'
 import type { UploadRemote } from './remote.ts'
 import type { BakedUploadActions } from './store.ts'
@@ -38,7 +38,7 @@ export function UploadPickerButton(props: UploadPickerProps): React.ReactElement
         title="上传文件"
         onClick={() => inputRef.current?.click()}
       >
-        <IconPlusOutline16 />
+        <IconPaperclipOutline16 />
       </button>
       <input
         ref={inputRef}

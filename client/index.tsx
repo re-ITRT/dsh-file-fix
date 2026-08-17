@@ -92,7 +92,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           name: 'settings.section',
           id: 'filefix-vision',
           order: 120,
-          label: '视觉辅助',
+          label: '👁️ 视觉辅助',
         }, VisionSettingsSection)
         return () => { dispose() }
       })
