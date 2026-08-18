@@ -1,6 +1,6 @@
 {
   "name": "dsh-file-fix",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "DeepSeek Harness upload UX plugin: unified file import — drag & drop / paste / picker for ANY file type into the session workspace, with a Hermes-style attachment rail",
   "type": "module",
   "main": "lib/index.js",

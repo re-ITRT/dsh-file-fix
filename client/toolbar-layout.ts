@@ -12,9 +12,9 @@
 let styleElt: HTMLStyleElement | null = null
 
 const layoutCss = `
-[data-filefix-tools] { display: flex; align-items: center; min-width: 0; flex: 1; }
+[data-filefix-tools] { display: flex; align-items: center; min-width: 0; }
 [data-filefix-tools] > [data-slot] { order: 2; }
-[data-filefix-tools] > [data-filefix-access-modes] { order: 3; margin-left: auto; }
+[data-filefix-tools] > [data-filefix-access-modes] { order: 3; }
 `
 
 /** 安装工具条布局补丁（幂等；client apply 时调用）。 */
