@@ -186,11 +186,12 @@ export function registerPlaceAttachmentTool(ctx: Context, store: FileAttachmentS
           targetPath: { type: 'string', required: true },
           size: { type: 'integer', required: true },
           overwritten: { type: 'boolean', required: true },
+          note: { type: 'string', required: true },
         },
       },
-      render: (_args, value: { name: string; targetPath: string; size: number; overwritten: boolean }) => [{
+      render: (_args, value: { name: string; targetPath: string; size: number; overwritten: boolean; note: string }) => [{
         type: 'text',
-        text: `已将附件 ${value.name}（${value.size} 字节）导出到 ${value.targetPath}${value.overwritten ? '（覆盖已有文件）' : ''}`,
+        text: `已将附件 ${value.name}（${value.size} 字节）导出到 ${value.targetPath}${value.overwritten ? '（覆盖已有文件）' : ''}。\n${value.note}`,
       }],
     },
     isConcurrencySafe: () => true,
@@ -222,6 +223,7 @@ export function registerPlaceAttachmentTool(ctx: Context, store: FileAttachmentS
         targetPath: resolved,
         size: found.bytes.byteLength,
         overwritten,
+        note: '读取建议：要查看/分析文件内容，请用 read_attachment 按 attachment_id 分段读取（每段约 48 KB，banner 给出下一个 offset）；str_replace_editor view 单次输出上限仅 16000 字符，读大文件（尤其代码/文本）效率极低，请勿用它整读大文件。',
       }
     },
   }))
