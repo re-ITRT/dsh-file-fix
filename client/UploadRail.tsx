@@ -93,7 +93,7 @@ export function UploadRail(props: UploadRailProps): React.ReactElement | null {
   if (items.length === 0 && notice === null) return null
 
   return (
-    <div style={s.rail}>
+    <div style={s.rail} data-upload-rail-host>
       {items.map(item => (
         <div
           key={item.id}

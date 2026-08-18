@@ -11,6 +11,7 @@ import { UploadPickerButton } from './UploadPickerButton.tsx'
 import { UploadRail } from './UploadRail.tsx'
 import { UserNodeWithFiles, setUserNodeUpload } from './UserNodeWithFiles.tsx'
 import { installVisionNavIcon } from './nav-icon.ts'
+import { installToolbarLayout } from './toolbar-layout.ts'
 import { VisionSettingsSection, setVisionUpload } from './VisionSettingsSection.tsx'
 
 export const name = 'dsh-file-fix'
@@ -99,7 +100,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
       })
 
       // 视觉辅助设置导航图标补丁（外壳 navIcon 无扩展点 → MutationObserver + CSS mask）。
-  installVisionNavIcon()
+      installVisionNavIcon()
+      // 输入工具栏布局：加号与文件图标相邻、权限右推（CSS order + margin-left:auto）。
+      installToolbarLayout()
 
   ctx.logger.info('[dsh-file-fix] client loaded: intercept + rail + picker + file bubbles + vision settings')
 }
