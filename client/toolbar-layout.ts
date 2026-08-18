@@ -32,18 +32,17 @@ export function installToolbarLayout(): void {
   const patch = (): void => {
     scheduled = false
     if (typeof document === 'undefined') return
-    for (const textarea of document.querySelectorAll('textarea')) {
-      const row = textarea.closest('[class*="row"]')
-      if (row === null) continue
-      const tools = row.querySelector('[class*="tools"]')
-      if (tools !== null) {
-        tools.setAttribute('data-filefix-tools', '1')
-        for (const modes of [...tools.querySelectorAll('[class*="modes"]')]) {
-          if (modes.textContent?.includes('Write') || modes.textContent?.includes('Read')) {
-            modes.setAttribute('data-filefix-access-modes', '1')
-          }
-        }
-      }
+    // 直接扫含权限按钮（Workspace Write / Read-only）的 tools 容器：
+    // textarea 与工具栏 .row 不在同一祖先链，不能从 textarea 回溯。
+    for (const tools of document.querySelectorAll('[class*="tools"]')) {
+      const writeBtn = [...tools.querySelectorAll('button')].find(btn =>
+        (btn.textContent ?? '').includes('Write') || (btn.textContent ?? '').includes('Read-only'),
+      )
+      if (writeBtn === undefined) continue
+      tools.setAttribute('data-filefix-tools', '1')
+      const modes = [...tools.querySelectorAll('[class*="modes"]')]
+        .find(modesEl => modesEl.contains(writeBtn))
+      if (modes !== undefined) modes.setAttribute('data-filefix-access-modes', '1')
     }
   }
   const schedule = (): void => {
