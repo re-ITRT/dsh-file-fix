@@ -32,17 +32,15 @@ export function installToolbarLayout(): void {
   const patch = (): void => {
     scheduled = false
     if (typeof document === 'undefined') return
-    // 直接扫含权限按钮（Workspace Write / Read-only）的 tools 容器：
-    // textarea 与工具栏 .row 不在同一祖先链，不能从 textarea 回溯。
+    // 直接扫 tools 容器（工具栏左区：+号 + modes 权限 + leftItems）。
+    // 不依赖权限按钮文案（不同权限模式显示 Workspace Write / Full access / Read-only…）：
+    // 以 [class*="modes"] 子容器为准打标。
     for (const tools of document.querySelectorAll('[class*="tools"]')) {
-      const writeBtn = [...tools.querySelectorAll('button')].find(btn =>
-        (btn.textContent ?? '').includes('Write') || (btn.textContent ?? '').includes('Read-only'),
-      )
-      if (writeBtn === undefined) continue
+      if (tools.hasAttribute('data-filefix-tools')) continue
+      const modes = tools.querySelector('[class*="modes"]')
+      if (modes === null) continue
       tools.setAttribute('data-filefix-tools', '1')
-      const modes = [...tools.querySelectorAll('[class*="modes"]')]
-        .find(modesEl => modesEl.contains(writeBtn))
-      if (modes !== undefined) modes.setAttribute('data-filefix-access-modes', '1')
+      modes.setAttribute('data-filefix-access-modes', '1')
     }
   }
   const schedule = (): void => {
