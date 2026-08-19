@@ -1,7 +1,7 @@
 /** 附件库：内容寻址对象存储 + JSONL 清单。真正的上传 —— 字节入库，不依赖工作区。 */
 
 import { createHash } from 'node:crypto'
-import { mkdir, open, readFile, unlink, rename } from 'node:fs/promises'
+import { mkdir, open, readFile, unlink, rename, appendFile } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -36,12 +36,14 @@ export class FileAttachmentStore extends Service {
   readonly root: string
   readonly objectsDir: string
   readonly manifestPath: string
+  readonly associationsPath: string
 
   constructor(ctx: Context, config: { home?: string } = {}) {
     super(ctx, 'filefixStore')
     this.root = resolve(join(config.home ?? dshHomePath(), 'attachments', 'filefix'))
     this.objectsDir = join(this.root, 'objects')
     this.manifestPath = join(this.root, 'manifest.jsonl')
+    this.associationsPath = join(this.root, 'associations.jsonl')
   }
 
   /** 写入字节并登记清单。重复内容共享同一对象（O_EXCL 幂等）。 */
@@ -127,6 +129,61 @@ export class FileAttachmentStore extends Service {
     const objectPath = join(this.objectsDir, attachmentId.slice(0, 2), attachmentId)
     return createReadStream(objectPath)
   }
+
+  /**
+   * 消息→附件 关联记录持久化（independent of object bytes）：即使 object 被 GC/迁移
+   * 清理，历史会话仍能列出文件名/大小/下载意图；重启后 rebuild 从记录恢复。
+   * 追加写，load 时同 messageId 后写覆盖（last-wins）。
+   */
+  /** 保存一条关联记录（messageId → {seq, files}）。 */
+  async saveAssociation(messageId: string, seq: number, files: UploadedFileLike[]): Promise<void> {
+    try {
+      await mkdir(this.root, { recursive: true })
+      await appendFile(
+        this.associationsPath,
+        `${JSON.stringify({ messageId, seq, files } satisfies AssociationRecord)}\n`,
+        'utf8',
+      )
+    } catch (error) {
+      // 记录失败不影响主流程（attached 内存仍可用）。
+    }
+  }
+
+  /** 加载全部关联记录（last-wins 覆盖同 messageId）。 */
+  async loadAssociations(): Promise<Map<string, { seq: number; files: UploadedFileLike[] }>> {
+    const map = new Map<string, { seq: number; files: UploadedFileLike[] }>()
+    try {
+      const text = await readFile(this.associationsPath, 'utf8')
+      for (const line of text.split('\n')) {
+        if (line.trim() === '') continue
+        try {
+          const rec = JSON.parse(line) as AssociationRecord
+          if (typeof rec.messageId === 'string' && Array.isArray(rec.files)) {
+            map.set(rec.messageId, { seq: rec.seq ?? -1, files: rec.files })
+          }
+        } catch {
+          // 半行脏数据跳过
+        }
+      }
+    } catch {
+      // 文件不存在 → 空
+    }
+    return map
+  }
+}
+
+/** 关联记录的最小文件形状（存储校验用；与 UploadedFile 对齐）。 */
+export interface UploadedFileLike {
+  attachmentId: string
+  name: string
+  mediaType: string
+  size: number
+}
+
+interface AssociationRecord {
+  messageId: string
+  seq: number
+  files: UploadedFileLike[]
 }
 
 async function writeExclusive(path: string, bytes: Buffer): Promise<void> {

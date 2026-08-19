@@ -89,6 +89,10 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
 
   const rebuildFor = async (sessionId: SessionId): Promise<void> => {
     try {
+      // 1) 持久化关联记录（重启后不依赖 FILE 事件/消息内容解析）。
+      for (const [messageId, { seq, files }] of await service.store.loadAssociations()) {
+        attached.set(messageId, { seq, files: files as unknown as UploadedFile[] })
+      }
       const inspection = await persistence.inspect(sessionId)
       for (const event of inspection.events) {
         if (event.type === FILES_ATTACHED_EVENT) {
@@ -126,6 +130,8 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
     if (entry !== undefined && eventDue.has(sessionId)) {
       eventDue.delete(sessionId)
       entry.seq = event.seq
+      // 关联记录持久化：重启后从 associations.jsonl 恢复，不依赖 FILE 事件是否写入。
+      void service.store.saveAssociation(messageId, event.seq, entry.files)
       const data: FilesAttachedEventData = { messageId, files: entry.files }
       // 监听器运行在 user/message 的 append 发布边界内：直接 append 会撞 reentrancy
       // 守卫；且 store 级 append 要求 seq 严格衔接已存日志 cursor。agent 会继续追加

@@ -37,7 +37,7 @@ export function registerDownloadRoute(ctx: Context, store: FileAttachmentStore):
       }
       const found = await store.read(attachmentId)
       if (found === undefined) {
-        sendError(res, 404, 'attachment not found')
+        sendError(res, 404, 'attachment bytes not retained (upload record exists, content was cleaned up)')
         return
       }
       const fallback = found.row.name.replace(/[^\x20-\x7e]/g, '_')
