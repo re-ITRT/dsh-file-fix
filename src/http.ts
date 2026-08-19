@@ -4,7 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { FileAttachmentStore } from './store.ts'
 
-const PREFIX = '/plugins/dsh-file-fix/download/'
+const PREFIX = '/plugins/dsh-file-fix/download'
 
 function sendError(res: ServerResponse, code: number, text: string): void {
   res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' })
@@ -30,7 +30,7 @@ export function registerDownloadRoute(ctx: Context, store: FileAttachmentStore):
         sendError(res, 404, 'not found')
         return
       }
-      const attachmentId = pathname.slice(PREFIX.length)
+      const attachmentId = pathname.slice(PREFIX.length).replace(/^\//, '')
       if (attachmentId === '' || !/^[0-9a-f]{64}$/.test(attachmentId)) {
         sendError(res, 400, 'invalid attachment id')
         return
