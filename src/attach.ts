@@ -7,6 +7,21 @@ import type { Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { UploadService } from './remote.ts'
 import type { FilesAttachedEventData, UploadedFile } from './types.ts'
 
+/** 从 notice 注入消息的 content 文本重建文件列表（`- name — attachment_id="…" size=N mediaType="…"`）。 */
+function parseFilesFromNotice(text: string): UploadedFile[] {
+  const files: UploadedFile[] = []
+  const lineRe = /-\s*(.+?)\s*—\s*attachment_id="([0-9a-fA-F]{16,})"\s*size=(\d+)\s*mediaType="([^"]*)"/g
+  for (const m of text.matchAll(lineRe)) {
+    files.push({
+      name: m[1]!.trim(),
+      attachmentId: m[2]! as string,
+      size: Number.parseInt(m[3]!, 10),
+      mediaType: m[4] ?? 'application/octet-stream',
+    })
+  }
+  return files
+}
+
 /** 自定义会话事件类型（ignorable：跨版本重放安全，客户端节点定义负责渲染）。 */
 export const FILES_ATTACHED_EVENT = 'filefix/files'
 
@@ -16,11 +31,11 @@ declare module '@deepseek-ai/dsh-session/types' {
   }
 }
 
+/** user/message 事件（含 plugin notice 注入消息——其 source.kind 为 'plugin' 以隐藏 UI，但仍需写入文件关联事件）。 */
 function isUserSurfaceMessage(event: SessionEvent): event is SessionEvent<'user/message'> {
   return event.type === 'user/message'
     && typeof event.data === 'object'
     && event.data !== null
-    && (event.data as { source?: { kind?: string } }).source?.kind === 'user'
 }
 
 function messageIdOf(event: SessionEvent<'user/message'>): string {
@@ -76,11 +91,24 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
     try {
       const inspection = await persistence.inspect(sessionId)
       for (const event of inspection.events) {
-        if (event.type !== FILES_ATTACHED_EVENT) continue
-        const data = event.data as unknown as FilesAttachedEventData
-        if (typeof data?.messageId === 'string' && Array.isArray(data.files)) {
-          attached.set(data.messageId, { seq: event.seq, files: data.files as UploadedFile[] })
+        if (event.type === FILES_ATTACHED_EVENT) {
+          const data = event.data as unknown as FilesAttachedEventData
+          if (typeof data?.messageId === 'string' && Array.isArray(data.files)) {
+            attached.set(data.messageId, { seq: event.seq, files: data.files as UploadedFile[] })
+          }
         }
+      }
+      // 兜底：早期会话未写入 filefix/files 事件时，从 notice 注入消息的 content
+      // 解析「attachment_id / size / mediaType」重建文件关联（按 user/message 的 seq）。
+      for (const event of inspection.events) {
+        if (event.type !== 'user/message') continue
+        const data = event.data as unknown as { id?: string; content?: ReadonlyArray<{ type?: string; text?: string }> } | null
+        if (typeof data?.id !== 'string') continue
+        if (attached.has(data.id)) continue
+        const text = (data.content ?? []).map(b => b.text ?? '').join('\n')
+        if (!text.includes('attachment_id=')) continue
+        const files = parseFilesFromNotice(text)
+        if (files.length > 0) attached.set(data.id, { seq: event.seq, files })
       }
     } catch (error) {
       ctx.logger.warn('[dsh-file-fix] rebuild attachments failed for %s: %o', String(sessionId), error)

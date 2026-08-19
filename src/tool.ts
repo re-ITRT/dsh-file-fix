@@ -85,6 +85,7 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
           more: { type: 'boolean', required: true },
           text: { type: 'string' },
           binary: { type: 'boolean' },
+          total: { type: 'integer' },
         },
       },
       render: (_args, value: { name: string; mediaType: string; size: number; offset: number; more: boolean; text?: string; binary?: boolean; total?: number }) => {
