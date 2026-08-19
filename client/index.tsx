@@ -9,15 +9,15 @@ import { UPLOAD_TYPERT_REMOTE, type UploadRemote } from './remote.ts'
 import { createUploadStore } from './store.ts'
 import { UploadPickerButton } from './UploadPickerButton.tsx'
 import { UploadRail } from './UploadRail.tsx'
-import { UserNodeWithFiles, setUserNodeUpload } from './UserNodeWithFiles.tsx'
 import { installVisionNavIcon } from './nav-icon.ts'
 import { installToolbarLayout } from './toolbar-layout.ts'
 import { VisionSettingsSection, setVisionUpload } from './VisionSettingsSection.tsx'
 import { RetentionSettingsSection, setRetentionUpload } from './RetentionSettingsSection.tsx'
+import { filefixFilesDefinition, FilefixFilesNodeView, setFilefixNodeUpload } from './FilefixFilesNode.tsx'
 
 export const name = 'dsh-file-fix'
 
-export const inject = ['slots', 'remote']
+export const inject = ['slots', 'remote', 'conversationEvents']
 
 export async function apply(ctx: ClientContext): Promise<void> {
   // 上传工具面：预检 + 字节上传 + 挂载，注入注入面（rail/picker/history 共享）。
@@ -49,23 +49,20 @@ export async function apply(ctx: ClientContext): Promise<void> {
     logger: ctx.logger,
   }
 
-  // 历史气泡：shadow 官方 user/steering 节点渲染器（priority -1 胜出），包装官方组件 + 文件列表。
-  // keyed 注册不支持 inject —— upload 经模块级引用传给包装组件。
-  setUserNodeUpload(upload)
+  // 历史文件气泡节点：官方 Conversation Node 范式。
+  // 用 conversationEvents 注册 business Definition（引擎 fold filefix/files 事件成
+  // State 并负责重放/翻页），再按 kind 'filefix-files' 注册专属 renderer——
+  // 不 shadow 官方 user/steering 节点，与官方节点互相独立。
+  setFilefixNodeUpload(upload)
   setVisionUpload(upload)
   setRetentionUpload(upload)
+  ctx.conversationEvents.register(filefixFilesDefinition)
   ctx.slots.inject('conversation.chat.node', () => {
-    const disposeUser = ctx.slots.register({
+    const dispose = ctx.slots.register({
       name: 'conversation.chat.node',
-      key: 'user',
-      priority: -1,
-    }, UserNodeWithFiles as unknown as (props: unknown) => ReactElement | null)
-    const disposeSteering = ctx.slots.register({
-      name: 'conversation.chat.node',
-      key: 'steering',
-      priority: -1,
-    }, UserNodeWithFiles as unknown as (props: unknown) => ReactElement | null)
-    return () => { disposeUser(); disposeSteering() }
+      key: 'filefix-files',
+    }, FilefixFilesNodeView as unknown as (props: unknown) => ReactElement | null)
+    return () => { dispose() }
   })
 
   ctx.slots.inject('conversation.input.dock', () => {

@@ -136,6 +136,15 @@ export class UploadService extends TypertRemoteService {
     return { ok: true, items }
   }
 
+  @Remote('checkAvailable')
+  async checkAvailable(request: { attachmentIds: string[] }): Promise<{ ok: true; available: Record<string, boolean> }> {
+    const available: Record<string, boolean> = {}
+    for (const id of request.attachmentIds ?? []) {
+      available[id] = await this.store.hasBytes(id)
+    }
+    return { ok: true, available }
+  }
+
   @Remote('getCleanupConfig')
   async getCleanupConfig(): Promise<{ ok: true; config: CleanupConfig }> {
     return { ok: true, config: readCleanupConfig() }

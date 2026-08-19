@@ -192,6 +192,24 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       }).readonly() },
     },
     {
+      id: 'dsh-file-fix#filefix/checkAvailable',
+      service: 'filefix',
+      namespace: 'filefix',
+      method: 'checkAvailable',
+      invocation: { kind: 'direct' },
+      parameters: [{
+        name: 'request',
+        wire: 'request',
+        source: 'json',
+        codec: { mode: 'strict', typeSymbol: 'dsh-file-fix#CheckAvailableRequest', schema: z.object({ attachmentIds: z.string().array() }).readonly() },
+      }],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-file-fix#CheckAvailableResult',
+        schema: z.object({ ok: z.literal(true), available: z.record(z.string(), z.boolean()) }).readonly(),
+      },
+    },
+    {
       id: 'dsh-file-fix#filefix/getVisionConfig',
       service: 'filefix',
       namespace: 'filefix',
@@ -372,6 +390,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     limits: () => Promise<RemoteResult<UploadLimits>>
     removeFile: (request: RemoveFileRequest) => Promise<RemoteResult<RemoveFileOutcome>>
     listFiles: (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; items: FilesAttachedEntry[] }>>
+    checkAvailable: (request: { attachmentIds: string[] }) => Promise<RemoteResult<{ ok: true; available: Record<string, boolean> }>>
     markPending: (request: MarkPendingRequest) => Promise<RemoteResult<MarkPendingOutcome>>
     unmarkPending: (request: UnmarkPendingRequest) => Promise<RemoteResult<UnmarkPendingOutcome>>
     getVisionConfig: () => Promise<RemoteResult<{ ok: true; config: { provider?: string; model?: string } }>>
@@ -389,6 +408,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'filefix/limits': () => Promise<RemoteResult<UploadLimits>>
     'filefix/removeFile': (request: RemoveFileRequest) => Promise<RemoteResult<RemoveFileOutcome>>
     'filefix/listFiles': (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; items: FilesAttachedEntry[] }>>
+    'filefix/checkAvailable': (request: { attachmentIds: string[] }) => Promise<RemoteResult<{ ok: true; available: Record<string, boolean> }>>
     'filefix/markPending': (request: MarkPendingRequest) => Promise<RemoteResult<MarkPendingOutcome>>
     'filefix/unmarkPending': (request: UnmarkPendingRequest) => Promise<RemoteResult<UnmarkPendingOutcome>>
     'filefix/getVisionConfig': () => Promise<RemoteResult<{ ok: true; config: { provider?: string; model?: string } }>>
