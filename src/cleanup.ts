@@ -140,17 +140,23 @@ export async function runCleanup(store: FileAttachmentStore): Promise<CleanupRun
       }
     }
 
-    // 会话级联（2 联动）：删除不属于任何现存会话的关联记录，
-    // 其独有引用（refCount===1）的字节一并删除；多会话共享的保留。
+    // 会话级联（2 联动）：删除「已确认消失」会话的关联记录 + 独有字节。
+    // 安全约束：仅当能拿到非空活会话集时才级联（空/异常=环境未就绪，绝不误删）。
     const knownSessions = await knownLiveSessions()
-    if (knownSessions !== null) {
-      const kept = records.filter(rec => rec.sessionId !== undefined && knownSessions.has(rec.sessionId))
+    if (knownSessions !== null && knownSessions.size > 0) {
+      const kept = records.filter(rec => {
+        // 保守：无 sessionId 的旧记录（0.1.16 前写入）不参与级联——它们可能是
+        // 任何会话的，删除它们没有依据，宁可留着（记录持久化优先原则）。
+        if (rec.sessionId === undefined) return true
+        return knownSessions.has(rec.sessionId)
+      })
       if (kept.length !== records.length) {
         await store.rewriteAssociations(kept)
         result.removedAssociations = records.length - kept.length
         const cascadeIds = new Set<string>()
         for (const rec of records) {
-          if (rec.sessionId === undefined || !knownSessions.has(rec.sessionId)) {
+          // 仅对「无 sessionId 的旧记录」之外的、确实从活会话集消失的记录做级联。
+          if (rec.sessionId !== undefined && !knownSessions.has(rec.sessionId)) {
             for (const file of rec.files) cascadeIds.add(file.attachmentId)
           }
         }
@@ -159,6 +165,8 @@ export async function runCleanup(store: FileAttachmentStore): Promise<CleanupRun
           result.removedBlobs += await store.deleteBlobs(cascadeTargets)
         }
       }
+    } else if (knownSessions !== null) {
+      // 活会话集为空：不做会话级联（避免把共享目录/测试环境误当孤儿清空）。
     }
 
     return result

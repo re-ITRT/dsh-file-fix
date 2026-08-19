@@ -110,6 +110,45 @@ function check(name, cond, detail = '') {
   check('skipped=true 且不动文件', r.skipped === true && store.calls.deleteBlobs.length === 0)
 }
 
+// ---- 5. 空活会话集合：绝不级联误删（共享目录/测试环境保护） ----
+{
+  console.log('[5] 活会话集为空不级联（防误删保护）')
+  const assocRecords = [
+    { messageId: 'm1', sessionId: 's-live-unknown', seq: 1, files: [{ attachmentId: 'keep', name: 'keep', mediaType: 'application/octet-stream', size: 10 }] },
+    { messageId: 'm2', sessionId: undefined, seq: 2, files: [{ attachmentId: 'legacy', name: 'legacy', mediaType: 'application/octet-stream', size: 10 }] },
+  ]
+  const store = makeStore({
+    createdAtMap: { keep: Date.now(), legacy: Date.now() },
+    bytesMap: { keep: 10, legacy: 10 },
+    assocRecords,
+  })
+  setSessionLister(async () => []) // 空活会话集 —— 模拟测试/profile 未就绪
+  writeCleanupConfig({ enabled: true, maxAgeDays: 0, maxCacheBytes: 0 })
+  const r = await runCleanup(store)
+  console.log('  result:', JSON.stringify(r))
+  check('空活会话集不做级联(不重写关联)', store.calls.rewriteAssociations === 0)
+  check('不级联删字节', store.calls.deleteBlobs.length === 0)
+  check('record 全保留', r.removedAssociations === 0)
+}
+
+// ---- 6. 无 sessionId 的旧记录永不级联（记录持久化优先） ----
+{
+  console.log('[6] 无 sessionId 旧记录保守保留')
+  const assocRecords = [
+    { messageId: 'm1', sessionId: undefined, seq: 1, files: [{ attachmentId: 'legacy', name: 'legacy', mediaType: 'application/octet-stream', size: 10 }] },
+  ]
+  const store = makeStore({
+    createdAtMap: { legacy: Date.now() },
+    bytesMap: { legacy: 10 },
+    assocRecords,
+  })
+  setSessionLister(async () => [{ id: 's-other' }]) // 有活会话但不含 legacy
+  writeCleanupConfig({ enabled: true, maxAgeDays: 0, maxCacheBytes: 0 })
+  const r = await runCleanup(store)
+  console.log('  result:', JSON.stringify(r))
+  check('无 sessionId 旧记录不重写/不删', store.calls.rewriteAssociations === 0 && r.removedAssociations === 0)
+}
+
 try { unlinkSync(cfgPath) } catch {}
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`)
