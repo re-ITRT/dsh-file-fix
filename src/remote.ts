@@ -113,11 +113,19 @@ export class UploadService extends TypertRemoteService {
 
   @Remote('listFiles')
   async listFiles(request: { sessionId: string }): Promise<{ ok: true; items: FilesAttachedEntry[] }> {
+    // 惰性恢复：内存 attached 为空（服务重启 / 历史会话未触发 rebuild）时，
+    // 从持久化关联记录现场恢复——客户端每次渲染都调用本方法，不依赖任何生命周期事件。
+    if (this.attached.size === 0) {
+      for (const [messageId, { seq, files }] of await this.store.loadAssociations()) {
+        this.attached.set(messageId, { seq, files: files as unknown as UploadedFile[] })
+      }
+      this.ctx.logger.info('[dsh-file-fix] listFiles lazily restored %d associations', this.attached.size)
+    }
     const items: FilesAttachedEntry[] = []
     for (const [messageId, entry] of this.attached) {
       items.push({ messageId, seq: entry.seq, files: entry.files })
     }
-    void request
+    void request.sessionId
     return { ok: true, items }
   }
 
