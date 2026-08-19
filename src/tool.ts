@@ -8,6 +8,7 @@ import { dirname, relative, resolve, sep } from 'node:path'
 import { existsSync as existsSyncSync } from 'node:fs'
 import type { Config } from './config.ts'
 import type { FileAttachmentStore } from './store.ts'
+import { touchAccess } from './cleanup.ts'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 
 /** UTF-8 可解码且无过多控制字符才当文本返回。 */
@@ -109,6 +110,7 @@ export function registerReadAttachmentTool(ctx: Context, store: FileAttachmentSt
       if (found === undefined) {
         throw new Error(`attachment "${id}" does not exist in the upload store`)
       }
+      touchAccess(id)
       const decoded = decodeText(found.bytes)
       if (decoded === undefined) {
         return {
@@ -205,6 +207,7 @@ export function registerPlaceAttachmentTool(ctx: Context, store: FileAttachmentS
       if (found === undefined) {
         throw new Error(`attachment "${id}" does not exist in the upload store`)
       }
+      touchAccess(id)
       const cwd = exec.agent?.session.header.cwd
       if (cwd === undefined || cwd === '') {
         throw new Error('no session workspace: cannot resolve target_path')

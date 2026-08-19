@@ -1,7 +1,7 @@
 /** 附件库：内容寻址对象存储 + JSONL 清单。真正的上传 —— 字节入库，不依赖工作区。 */
 
 import { createHash } from 'node:crypto'
-import { mkdir, open, readFile, unlink, rename, appendFile } from 'node:fs/promises'
+import { mkdir, open, readFile, unlink, rename, appendFile, stat as statFile } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -135,13 +135,18 @@ export class FileAttachmentStore extends Service {
    * 清理，历史会话仍能列出文件名/大小/下载意图；重启后 rebuild 从记录恢复。
    * 追加写，load 时同 messageId 后写覆盖（last-wins）。
    */
-  /** 保存一条关联记录（messageId → {seq, files}）。 */
-  async saveAssociation(messageId: string, seq: number, files: UploadedFileLike[]): Promise<void> {
+  /** 保存一条关联记录（messageId → {seq, files, sessionId}）。 */
+  async saveAssociation(
+    messageId: string,
+    sessionId: string,
+    seq: number,
+    files: UploadedFileLike[],
+  ): Promise<void> {
     try {
       await mkdir(this.root, { recursive: true })
       await appendFile(
         this.associationsPath,
-        `${JSON.stringify({ messageId, seq, files } satisfies AssociationRecord)}\n`,
+        `${JSON.stringify({ messageId, sessionId, seq, files } satisfies AssociationRecord)}\n`,
         'utf8',
       )
     } catch (error) {
@@ -152,6 +157,15 @@ export class FileAttachmentStore extends Service {
   /** 加载全部关联记录（last-wins 覆盖同 messageId）。 */
   async loadAssociations(): Promise<Map<string, { seq: number; files: UploadedFileLike[] }>> {
     const map = new Map<string, { seq: number; files: UploadedFileLike[] }>()
+    for (const rec of await this.loadAssociationRecords()) {
+      map.set(rec.messageId, { seq: rec.seq ?? -1, files: rec.files })
+    }
+    return map
+  }
+
+  /** 加载全部关联记录（含 sessionId，供 GC 会话级联使用）。 */
+  async loadAssociationRecords(): Promise<AssociationRecord[]> {
+    const records: AssociationRecord[] = []
     try {
       const text = await readFile(this.associationsPath, 'utf8')
       for (const line of text.split('\n')) {
@@ -159,7 +173,7 @@ export class FileAttachmentStore extends Service {
         try {
           const rec = JSON.parse(line) as AssociationRecord
           if (typeof rec.messageId === 'string' && Array.isArray(rec.files)) {
-            map.set(rec.messageId, { seq: rec.seq ?? -1, files: rec.files })
+            records.push(rec)
           }
         } catch {
           // 半行脏数据跳过
@@ -168,7 +182,67 @@ export class FileAttachmentStore extends Service {
     } catch {
       // 文件不存在 → 空
     }
-    return map
+    return records
+  }
+
+  /** 全量重写关联记录（GC / 会话级联后清理孤儿会话的记录）。 */
+  async rewriteAssociations(records: readonly AssociationRecord[]): Promise<void> {
+    const tmp = `${this.associationsPath}.tmp`
+    await writeLines(tmp, records.map(rec => JSON.stringify({
+      messageId: rec.messageId,
+      sessionId: rec.sessionId,
+      seq: rec.seq,
+      files: rec.files,
+    } satisfies AssociationRecord)))
+    await rename(tmp, this.associationsPath).catch(() => {})
+  }
+
+  /**
+   * 删除一批附件的对象字节 + 清单登记，但保留关联记录（历史气泡仍显示文件名/下载意图）。
+   * 返回实际删除的对象数。
+   */
+  async deleteBlobs(attachmentIds: readonly string[]): Promise<number> {
+    if (attachmentIds.length === 0) return 0
+    const drop = new Set(attachmentIds)
+    const rows = (await this.list()).filter(row => !drop.has(row.attachmentId))
+    const tmp = `${this.manifestPath}.tmp`
+    await writeManifest(tmp, rows)
+    await rename(tmp, this.manifestPath).catch(() => {})
+    let removed = 0
+    for (const attachmentId of attachmentIds) {
+      const objectPath = join(this.objectsDir, attachmentId.slice(0, 2), attachmentId)
+      await unlink(objectPath).then(() => removed++).catch(() => {})
+    }
+    return removed
+  }
+
+  /** 一个对象字节是否仍存在（下载按钮可用性判定）。 */
+  async hasBytes(attachmentId: string): Promise<boolean> {
+    const row = (await this.list()).find(item => item.attachmentId === attachmentId)
+    if (row === undefined) return false
+    const objectPath = join(this.objectsDir, attachmentId.slice(0, 2), attachmentId)
+    try {
+      await readFile(objectPath)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** 对象字节总大小（GB/CB 阈值判定）。 */
+  async totalBytes(): Promise<number> {
+    const rows = await this.list()
+    let total = 0
+    for (const row of rows) {
+      const objectPath = join(this.objectsDir, row.attachmentId.slice(0, 2), row.attachmentId)
+      try {
+        const stat = await statFile(objectPath)
+        total += stat.size
+      } catch {
+        // 对象缺失不计（清单残影）
+      }
+    }
+    return total
   }
 }
 
@@ -180,8 +254,10 @@ export interface UploadedFileLike {
   size: number
 }
 
-interface AssociationRecord {
+export interface AssociationRecord {
   messageId: string
+  /** 所属会话（GC 会话级联/孤儿判定用；旧记录可能缺失 → 无级联可做）。 */
+  sessionId?: string
   seq: number
   files: UploadedFileLike[]
 }
@@ -209,6 +285,16 @@ async function writeManifest(path: string, rows: readonly ManifestRow[]): Promis
   const handle = await open(path, 'w')
   try {
     for (const row of rows) await handle.writeFile(JSON.stringify(row) + '\n')
+  } finally {
+    await handle.close()
+  }
+}
+
+/** 原子写多行（附带 .tmp 文件，供 rewriteAssociations 使用）。 */
+async function writeLines(path: string, lines: readonly string[]): Promise<void> {
+  const handle = await open(path, 'w')
+  try {
+    for (const line of lines) await handle.writeFile(line + '\n')
   } finally {
     await handle.close()
   }

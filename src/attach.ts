@@ -131,7 +131,8 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
       eventDue.delete(sessionId)
       entry.seq = event.seq
       // 关联记录持久化：重启后从 associations.jsonl 恢复，不依赖 FILE 事件是否写入。
-      void service.store.saveAssociation(messageId, event.seq, entry.files)
+      // sessionId 一并落盘（清洁：GC 会话级联需要知道记录属于哪个会话）。
+      void service.store.saveAssociation(messageId, sessionId, event.seq, entry.files)
       const data: FilesAttachedEventData = { messageId, files: entry.files }
       // 监听器运行在 user/message 的 append 发布边界内：直接 append 会撞 reentrancy
       // 守卫；且 store 级 append 要求 seq 严格衔接已存日志 cursor。agent 会继续追加

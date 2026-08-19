@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { FileAttachmentStore } from './store.ts'
+import { touchAccess } from './cleanup.ts'
 
 const PREFIX = '/plugins/dsh-file-fix/download'
 
@@ -42,6 +43,7 @@ export function registerDownloadRoute(ctx: Context, store: FileAttachmentStore):
           sendError(res, 404, 'attachment bytes not retained (upload record exists, content was cleaned up)')
           return
         }
+        touchAccess(attachmentId) // 老化判定：下载 = 最近访问
         const fallback = found.row.name.replace(/[^\x20-\x7e]/g, '_')
         res.writeHead(200, {
           'content-type': found.row.mediaType || 'application/octet-stream',

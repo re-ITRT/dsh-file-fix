@@ -6,6 +6,8 @@ import type { Config } from './config.ts'
 import { mediaTypeOf, sanitizeName } from './name.ts'
 import { readVisionConfig, writeVisionConfig } from './vision.ts'
 import type { VisionConfig } from './vision.ts'
+import { readCleanupConfig, writeCleanupConfig, runCleanup, cleanupStatsOf } from './cleanup.ts'
+import type { CleanupConfig, CleanupRunResult, CleanupStats } from './cleanup.ts'
 import type { FilesAttachedEntry, VisionCandidateProvider } from './types.ts'
 import type { FileAttachmentStore } from './store.ts'
 import type {
@@ -121,12 +123,44 @@ export class UploadService extends TypertRemoteService {
       }
       this.ctx.logger.info('[dsh-file-fix] listFiles lazily restored %d associations', this.attached.size)
     }
+    // 字节可用性：下载按钮置灰依据（附件被 GC 后仍能列出文件名，但按钮失效）。
     const items: FilesAttachedEntry[] = []
     for (const [messageId, entry] of this.attached) {
-      items.push({ messageId, seq: entry.seq, files: entry.files })
+      const files = await Promise.all(entry.files.map(async file => ({
+        ...file,
+        available: await this.store.hasBytes(file.attachmentId),
+      })))
+      items.push({ messageId, seq: entry.seq, files })
     }
     void request.sessionId
     return { ok: true, items }
+  }
+
+  @Remote('getCleanupConfig')
+  async getCleanupConfig(): Promise<{ ok: true; config: CleanupConfig }> {
+    return { ok: true, config: readCleanupConfig() }
+  }
+
+  @Remote('setCleanupConfig')
+  async setCleanupConfig(request: { config: Partial<CleanupConfig> }): Promise<{ ok: true }> {
+    writeCleanupConfig(request.config ?? {})
+    this.ctx.logger.info('[dsh-file-fix] cleanup config updated: %o', request.config)
+    return { ok: true }
+  }
+
+  @Remote('runCleanup')
+  async runCleanup(): Promise<{ ok: true; result: CleanupRunResult }> {
+    const result = await runCleanup(this.store)
+    this.ctx.logger.info(
+      '[dsh-file-fix] manual cleanup: removed %d blobs (%d bytes), %d association records',
+      result.removedBlobs, result.removedBytes, result.removedAssociations,
+    )
+    return { ok: true, result }
+  }
+
+  @Remote('getCleanupStats')
+  async getCleanupStats(): Promise<{ ok: true; stats: CleanupStats }> {
+    return { ok: true, stats: await cleanupStatsOf(this.store) }
   }
 
   @Remote('markPending')

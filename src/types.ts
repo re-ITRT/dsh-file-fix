@@ -70,7 +70,7 @@ export interface FilesAttachedEventData {
 export interface FilesAttachedEntry {
   messageId: string
   seq: number
-  files: UploadedFile[]
+  files: (UploadedFile & { available: boolean })[]
 }
 
 /** 视觉辅助候选 provider（设置页下拉）。 */

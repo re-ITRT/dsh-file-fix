@@ -13,6 +13,7 @@ import { UserNodeWithFiles, setUserNodeUpload } from './UserNodeWithFiles.tsx'
 import { installVisionNavIcon } from './nav-icon.ts'
 import { installToolbarLayout } from './toolbar-layout.ts'
 import { VisionSettingsSection, setVisionUpload } from './VisionSettingsSection.tsx'
+import { RetentionSettingsSection, setRetentionUpload } from './RetentionSettingsSection.tsx'
 
 export const name = 'dsh-file-fix'
 
@@ -52,6 +53,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // keyed 注册不支持 inject —— upload 经模块级引用传给包装组件。
   setUserNodeUpload(upload)
   setVisionUpload(upload)
+  setRetentionUpload(upload)
   ctx.slots.inject('conversation.chat.node', () => {
     const disposeUser = ctx.slots.register({
       name: 'conversation.chat.node',
@@ -96,6 +98,17 @@ export async function apply(ctx: ClientContext): Promise<void> {
           order: 120,
           label: '视觉辅助',
         }, VisionSettingsSection)
+        return () => { dispose() }
+      })
+
+      // 设置 → 附件清理 section：GC 阈值 + 手动清理。
+      ctx.slots.inject('settings.section', () => {
+        const dispose = ctx.slots.register({
+          name: 'settings.section',
+          id: 'filefix-retention',
+          order: 121,
+          label: '附件清理',
+        }, RetentionSettingsSection)
         return () => { dispose() }
       })
 

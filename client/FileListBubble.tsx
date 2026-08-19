@@ -7,7 +7,7 @@ interface FilesNode {
   data: {
     messageSeq: number
     messageId: string
-    files: UploadedFile[]
+    files: (UploadedFile & { available?: boolean })[]
   }
 }
 
@@ -19,24 +19,28 @@ export function downloadUrl(attachmentId: string): string {
   return `/plugins/dsh-file-fix/download/${attachmentId}`
 }
 
-/** 历史消息下方：文件列表（附件机制，工作区无关）。 */
+/** 历史消息下方：文件列表（附件机制，工作区无关）。字节被清理后下载按钮消失（记录保留）。 */
 export function FileListBubble({ node }: FileListBubbleProps): React.ReactElement {
   const { files } = node.data
   return (
     <div style={s.bubble} aria-label="附件文件列表">
       <div style={s.bubbleTitle}>📎 {files.length} 个附件文件</div>
-      {files.map(file => (
-        <a
-          key={file.attachmentId}
-          style={s.fileRow}
-          href={downloadUrl(file.attachmentId)}
-          title={`下载 ${file.name}`}
-        >
-          <span style={s.fileName}>{file.name}</span>
-          <span style={s.fileMeta}>{formatSize(file.size)}</span>
-          <span style={s.downloadMark}>⬇</span>
-        </a>
-      ))}
+      {files.map(file => {
+        const available = file.available !== false
+        return (
+          <div key={file.attachmentId} style={s.fileRow}>
+            <span style={s.fileName}>{file.name}</span>
+            <span style={s.fileMeta}>{formatSize(file.size)}</span>
+            {available ? (
+              <a style={s.downloadLink} href={downloadUrl(file.attachmentId)} title={`下载 ${file.name}`}>
+                <span style={s.downloadMark}>⬇</span>
+              </a>
+            ) : (
+              <span style={s.downloadGone} title="附件字节已清理，仅保留记录">已清理</span>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

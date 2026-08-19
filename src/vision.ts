@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { Config } from './config.ts'
 import type { FileAttachmentStore } from './store.ts'
+import { touchAccess } from './cleanup.ts'
 
 /** 视觉辅助模型配置（独立 JSON，设置页经 remote 读写；不依赖 cordis 静态 config）。 */
 export interface VisionConfig {
@@ -52,6 +53,7 @@ interface FoundImage { row: { name: string; mediaType: string }; bytes: Buffer }
 async function requireImage(store: FileAttachmentStore, id: string): Promise<FoundImage> {
   const found = await store.read(id)
   if (found === undefined) throw new Error(`attachment "${id}" does not exist in the upload store`)
+  touchAccess(id) // 老化判定：内容读取 = 最近访问
   if (!isImageBytes(found.bytes)) {
     throw new Error(`attachment "${found.row.name}" is not an image (${found.row.mediaType || 'unknown type'})`)
   }

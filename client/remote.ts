@@ -18,6 +18,7 @@ import type {
   UnmarkPendingRequest,
   UploadLimits,
 } from '../src/types.ts'
+import type { CleanupConfig, CleanupRunResult, CleanupStats } from '../src/cleanup.ts'
 
 const visionConfig$schema = z.object({
   provider: z.string().optional(),
@@ -39,6 +40,15 @@ const uploadedFile$schema = z.object({
   name: z.string(),
   mediaType: z.string(),
   size: z.number(),
+}).readonly()
+
+/** listFiles 返回的文件：附加字节可用性（下载按钮置灰依据）。 */
+const listFileItem$schema = z.object({
+  attachmentId: z.string(),
+  name: z.string(),
+  mediaType: z.string(),
+  size: z.number(),
+  available: z.boolean(),
 }).readonly()
 
 const persistFileRequest$schema = z.object({
@@ -88,6 +98,37 @@ const unmarkPendingOutcome$schema = z.union([
   z.object({ ok: z.literal(true) }).readonly(),
   z.object({ ok: z.literal(false), code: z.string() }).readonly(),
 ]).readonly()
+
+const cleanupConfig$schema = z.object({
+  enabled: z.boolean(),
+  maxAgeDays: z.number(),
+  maxCacheBytes: z.number(),
+  gcIntervalHours: z.number(),
+}).readonly()
+
+const cleanupConfigPartial$schema = z.object({
+  enabled: z.boolean().optional(),
+  maxAgeDays: z.number().optional(),
+  maxCacheBytes: z.number().optional(),
+  gcIntervalHours: z.number().optional(),
+}).readonly()
+
+const cleanupRunResult$schema = z.object({
+  removedBlobs: z.number(),
+  removedBytes: z.number(),
+  removedAssociations: z.number(),
+  skipped: z.boolean(),
+}).readonly()
+
+const cleanupStats$schema = z.object({
+  enabled: z.boolean(),
+  maxAgeDays: z.number(),
+  maxCacheBytes: z.number(),
+  gcIntervalHours: z.number(),
+  manifestCount: z.number(),
+  associationCount: z.number(),
+  totalBytes: z.number(),
+}).readonly()
 
 export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
   package: 'dsh-file-fix',
@@ -146,7 +187,7 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
         items: z.array(z.object({
           messageId: z.string(),
           seq: z.number(),
-          files: uploadedFile$schema.array(),
+          files: listFileItem$schema.array(),
         }).readonly()).readonly(),
       }).readonly() },
     },
@@ -261,6 +302,63 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       }],
       result: { mode: 'strict', typeSymbol: 'dsh-file-fix#UnmarkPendingOutcome', schema: unmarkPendingOutcome$schema },
     },
+    {
+      id: 'dsh-file-fix#filefix/getCleanupConfig',
+      service: 'filefix',
+      namespace: 'filefix',
+      method: 'getCleanupConfig',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'GetCleanupConfigResult',
+        schema: z.object({ ok: z.literal(true), config: cleanupConfig$schema }),
+      },
+    },
+    {
+      id: 'dsh-file-fix#filefix/setCleanupConfig',
+      service: 'filefix',
+      namespace: 'filefix',
+      method: 'setCleanupConfig',
+      invocation: { kind: 'direct' },
+      parameters: [{
+        name: 'request',
+        wire: 'request',
+        source: 'json',
+        codec: {
+          mode: 'strict',
+          typeSymbol: 'SetCleanupConfigRequest',
+          schema: z.object({ config: cleanupConfigPartial$schema }),
+        },
+      }],
+      result: { mode: 'strict', typeSymbol: 'SetCleanupConfigResult', schema: z.object({ ok: z.literal(true) }) },
+    },
+    {
+      id: 'dsh-file-fix#filefix/runCleanup',
+      service: 'filefix',
+      namespace: 'filefix',
+      method: 'runCleanup',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'RunCleanupResult',
+        schema: z.object({ ok: z.literal(true), result: cleanupRunResult$schema }),
+      },
+    },
+    {
+      id: 'dsh-file-fix#filefix/getCleanupStats',
+      service: 'filefix',
+      namespace: 'filefix',
+      method: 'getCleanupStats',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'GetCleanupStatsResult',
+        schema: z.object({ ok: z.literal(true), stats: cleanupStats$schema }),
+      },
+    },
   ],
 }
 
@@ -280,6 +378,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     setVisionConfig: (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
     testVisionModel: (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
     listVisionCandidates: () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
+    getCleanupConfig: () => Promise<RemoteResult<{ ok: true; config: CleanupConfig }>>
+    setCleanupConfig: (request: { config: Partial<CleanupConfig> }) => Promise<RemoteResult<{ ok: true }>>
+    runCleanup: () => Promise<RemoteResult<{ ok: true; result: CleanupRunResult }>>
+    getCleanupStats: () => Promise<RemoteResult<{ ok: true; stats: CleanupStats }>>
   }
 
   interface TypertRemoteMap {
@@ -293,6 +395,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'filefix/setVisionConfig': (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
     'filefix/testVisionModel': (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
     'filefix/listVisionCandidates': () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
+    'filefix/getCleanupConfig': () => Promise<RemoteResult<{ ok: true; config: CleanupConfig }>>
+    'filefix/setCleanupConfig': (request: { config: Partial<CleanupConfig> }) => Promise<RemoteResult<{ ok: true }>>
+    'filefix/runCleanup': () => Promise<RemoteResult<{ ok: true; result: CleanupRunResult }>>
+    'filefix/getCleanupStats': () => Promise<RemoteResult<{ ok: true; stats: CleanupStats }>>
   }
 
   interface TypertRemoteNamespaceMap {

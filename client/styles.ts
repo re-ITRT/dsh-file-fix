@@ -163,6 +163,21 @@ export const fileRow: CSSProperties = {
   padding: '2px 0',
 }
 
+export const downloadLink: CSSProperties = {
+  flex: 'none',
+  color: 'inherit',
+  textDecoration: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+}
+
+export const downloadGone: CSSProperties = {
+  flex: 'none',
+  color: 'var(--dsw-alias-label-caption)',
+  fontSize: 11,
+  opacity: 0.7,
+}
+
 export const fileName: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
