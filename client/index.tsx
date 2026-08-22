@@ -10,6 +10,8 @@ import { UploadPickerButton, setPickerShare } from './UploadPickerButton.tsx'
 import { TwoLayerRail, setTwoLayerShare } from './TwoLayerRail.tsx'
 import { ModelSelectWithVision, setModelNeedsVision, setModelSelectService, setModelVisionSupport } from './ModelSelectWithVision.tsx'
 import { ensureUploadStoreInstance, getUploadStoreActions } from './upload-store.ts'
+import { installTwoLayerController, setTwoLayerController } from './two-layer-controller.ts'
+import { markLocalSessionNeedsVision } from './vision-context.ts'
 import { installVisionNavIcon } from './nav-icon.ts'
 import { installToolbarLayout } from './toolbar-layout.ts'
 import { VisionSettingsSection, setVisionUpload } from './VisionSettingsSection.tsx'
@@ -49,6 +51,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
   ensureUploadStoreInstance()
   setPickerShare({ upload, getLimits: () => limitsBox.value, logger: ctx.logger })
   setTwoLayerShare({ upload, getLimits: () => limitsBox.value, logger: ctx.logger })
+
+  // 安装 document 级拖拽/粘贴拦截（始终生效，独立于 slot 渲染）。
+  setTwoLayerController({
+    upload,
+    getLimits: () => limitsBox.value,
+    logger: ctx.logger,
+    getSessionId: () => undefined,
+    onAddImages: () => {},
+    canAcceptDrop: () => true,
+    markVision: (sessionId: string) => { markLocalSessionNeedsVision(sessionId) },
+  })
+  installTwoLayerController()
   if (modelDirectories !== undefined) {
     setModelSelectService({
       directoryFor: (sessionId: string) => modelDirectories.directoryFor(sessionId) as import('./ModelSelectWithVision.tsx').ModelDirectoryLike,

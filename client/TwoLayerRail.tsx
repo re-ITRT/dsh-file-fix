@@ -1,18 +1,17 @@
 /** 两层拖放 rail：图像层（官方 draft images）+ 文件层（插件附件）。
  * - 接管 conversation.input.attachments slot（priority 覆盖官方 ComposerAttachments）。
  * - 渲染时机：
- *   - 有文件拖进 dsh 页面 → 渲染两层（让用户选择拖到哪层）
- *   - 文件层有内容 → 渲染文件层
- *   - 图像层有内容 → 渲染图像层
- *   - 其余情况（无拖拽、无内容）→ 不渲染
- * - 拖拽分流：
- *   - 拖到文件层 → 全部进文件层（图片也进文件层，走插件文件链路）
- *   - 拖到图像层 → 图片进图像层（官方链路）、文件进文件层（插件链路）
- * - 两层图片可相互拖动调整（文件层→图像层走官方注入，图像层→文件层走插件上传）。
+ *   - 有文件拖进 dsh 页面（dragenter）→ 渲染两层
+ *   - 粘贴文件（paste）→ 渲染两层 + 自动分流（图片→图像层、文件→文件层）
+ *   - 文件层有内容 → 渲染文件层；图像层有内容 → 渲染图像层
+ *   - 其余情况 → 不渲染
+ * - 拖拽分流：拖到文件层 → 全部进文件层；拖到图像层 → 图片进图像层、文件进文件层。
+ * - 两层图片可相互拖动调整。
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, DragEvent as ReactDragEvent, ReactElement } from 'react'
+import type { ClipboardEvent as ReactClipboardEvent } from 'react'
 import type {
   ComposerAttachmentsOwnerProps,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -24,6 +23,7 @@ import type { LoggerLike } from './upload-controller.ts'
 import { intakeFiles } from './upload-controller.ts'
 import { getUploadStoreActions, getUploadStoreSnapshot, subscribeUploadStore } from './upload-store.ts'
 import { markLocalSessionNeedsVision } from './vision-context.ts'
+import { getPageDrag, subscribePageDrag, setControllerAddImages, setControllerSessionId } from './two-layer-controller.ts'
 import * as s from './styles.ts'
 
 /** 模块级注入面（slot 无自定义 inject，由 index.tsx 注入）。 */
@@ -191,11 +191,12 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
     attachments, canAcceptDrop, onAddImages, onRemoveImage,
     sessionId,
   } = props
+
+  // 把官方 owner 的图片注入能力 + 会话 id 同步给 controller（paste 分流用）。
+  setControllerAddImages(files => { onAddImages(files) }, () => canAcceptDrop)
+  setControllerSessionId(sessionId)
   const [imageDrop, setImageDrop] = useState(false)
   const [fileDrop, setFileDrop] = useState(false)
-  // 页面级拖拽进入状态（有文件拖进 dsh 时显示两层）。
-  const [pageDrag, setPageDrag] = useState(false)
-  const dragDepth = useRef(0)
   const share = useTwoLayerShare()
   const upload = share?.upload
   const actions = getUploadStoreActions()
@@ -209,42 +210,15 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
   )
   const items: readonly UploadItem[] = storeState.items
 
-  // document 级拖拽检测：拖进页面 → 显示两层。
+  // 页面拖拽/粘贴激活状态（由 controller 管理）。
+  const [pageDrag, setPageDragLocal] = useState(getPageDrag())
   useEffect(() => {
-    const onDragEnter = (e: globalThis.DragEvent): void => {
-      if (e.dataTransfer === null || !Array.from(e.dataTransfer.types).includes('Files')) return
-      e.preventDefault()
-      dragDepth.current += 1
-      setPageDrag(true)
-    }
-    const onDragOver = (e: globalThis.DragEvent): void => {
-      if (e.dataTransfer === null || !Array.from(e.dataTransfer.types).includes('Files')) return
-      e.preventDefault()
-    }
-    const onDragLeave = (e: globalThis.DragEvent): void => {
-      if (e.dataTransfer === null || !Array.from(e.dataTransfer.types).includes('Files')) return
-      dragDepth.current = Math.max(0, dragDepth.current - 1)
-      if (dragDepth.current === 0) setPageDrag(false)
-    }
-    const onDrop = (): void => {
-      dragDepth.current = 0
-      setPageDrag(false)
-      setImageDrop(false)
-      setFileDrop(false)
-    }
-    document.addEventListener('dragenter', onDragEnter)
-    document.addEventListener('dragover', onDragOver)
-    document.addEventListener('dragleave', onDragLeave)
-    document.addEventListener('drop', onDrop)
-    return () => {
-      document.removeEventListener('dragenter', onDragEnter)
-      document.removeEventListener('dragover', onDragOver)
-      document.removeEventListener('dragleave', onDragLeave)
-      document.removeEventListener('drop', onDrop)
-    }
+    const sync = (): void => setPageDragLocal(getPageDrag())
+    sync()
+    return subscribePageDrag(sync)
   }, [])
 
-  // 渲染时机：页面拖拽进入 / 文件层有内容 / 图像层有内容。
+  // 渲染时机：页面拖拽进入 / 粘贴 / 文件层有内容 / 图像层有内容。
   const hasImage = attachments.length > 0
   const hasFile = items.length > 0
   const showImageLayer = pageDrag || hasImage
@@ -267,30 +241,9 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
     if (others.length > 0) dropToFiles(others)
   }
 
-  // 每层的 drag handlers。
-  const layerHandlers = (kind: 'image' | 'file') => {
-    const setActive = kind === 'image' ? setImageDrop : setFileDrop
-    return {
-      onDragEnter: (e: ReactDragEvent) => { if (hasFiles(e)) { e.preventDefault(); setActive(true) } },
-      onDragOver: (e: ReactDragEvent) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' } },
-      onDragLeave: () => { setActive(false) },
-      onDrop: (e: ReactDragEvent) => {
-        if (!hasFiles(e)) return
-        e.preventDefault()
-        setActive(false)
-        const files = Array.from(e.dataTransfer.files ?? [])
-        if (kind === 'image') dropToImageLayer(files)
-        else dropToFiles(files)
-      },
-    }
-  }
-
-  // 两层图片互拖：
-  // - 文件层图片 → 图像层：还原 File → onAddImages（官方注入），插件 store 移除。
-  // - 图像层图片 → 文件层：原始 File → intakeFiles（插件上传），官方移除。
+  // 两层图片互拖。
   const [dragKind, setDragKind] = useState<'image' | 'file' | null>(null)
 
-  // 从插件 item 的 base64 还原 File（文件层 → 图像层）。
   const itemToFile = (item: UploadItem): File => {
     const bytes = atob(item.data)
     const arr = new Uint8Array(bytes.length)
@@ -298,20 +251,17 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
     return new File([arr], item.name, { type: item.mediaType || 'application/octet-stream' })
   }
 
-  // 文件层 item 的拖拽源（可拖到图像层）。
   const onFileItemDragStart = (e: ReactDragEvent, item: UploadItem): void => {
     if (item.data === '' || !item.mediaType.startsWith('image/')) return
     e.dataTransfer.setData('application/x-filefix-item', item.id)
     e.dataTransfer.effectAllowed = 'move'
     setDragKind('file')
   }
-  // 图像层 attachment 的拖拽源（可拖到文件层）。
   const onImageItemDragStart = (e: ReactDragEvent): void => {
     e.dataTransfer.setData('application/x-filefix-image', '1')
     e.dataTransfer.effectAllowed = 'move'
     setDragKind('image')
   }
-  // 图像层接收：文件层拖来的图片 → onAddImages。
   const onImageLayerDropFromFile = (e: ReactDragEvent): void => {
     const itemId = e.dataTransfer.getData('application/x-filefix-item')
     if (itemId !== '') {
@@ -325,13 +275,10 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
       }
     }
   }
-  // 删除插件文件 item。
   const removeFile = (item: UploadItem): void => {
     if (actions === undefined) return
     removeFileOf(actions, item, upload, sessionId, logger)
   }
-
-  // 文件层接收：图像层拖来的图片 → 插件上传。
   const onFileLayerDropFromImage = (e: ReactDragEvent, imageId: string): void => {
     e.preventDefault()
     const attachment = attachments.find(a => a.id === imageId)
@@ -376,7 +323,7 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
               dropToImageLayer(Array.from(e.dataTransfer.files ?? []))
             }}
           >
-            {attachments.length === 0 && !pageDrag && (
+            {attachments.length === 0 && (
               <div style={dropPlaceholder}>
                 <span style={dropIcon}>{'🖼'}</span>
                 <span>{'拖图片到这里，直接加入模型上下文'}</span>
@@ -400,12 +347,6 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
                 >×</button>
               </div>
             ))}
-            {attachments.length === 0 && pageDrag && (
-              <div style={dropPlaceholder}>
-                <span style={dropIcon}>{'🖼'}</span>
-                <span>{'释放到此处 → 图片直接注入模型'}</span>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -436,7 +377,6 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
             onDrop={e => {
               const imageFlag = e.dataTransfer.getData('application/x-filefix-image')
               if (imageFlag !== '') {
-                // 图像层某张图被拖到文件层：由子项处理（图片项本身在文件层接收）。
                 setFileDrop(false)
                 return
               }
@@ -446,7 +386,7 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
               dropToFiles(Array.from(e.dataTransfer.files ?? []))
             }}
           >
-            {items.length === 0 && !pageDrag && (
+            {items.length === 0 && (
               <div style={dropPlaceholder}>
                 <span style={dropIcon}>{'📄'}</span>
                 <span>{'拖文件到这里，以附件形式注入'}</span>
@@ -460,7 +400,6 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
                 draggable={item.mediaType.startsWith('image/') && item.data !== ''}
                 onDragStart={e => onFileItemDragStart(e, item)}
                 onDragOver={e => {
-                  // 文件层内的图片项，若拖来的是图像层图片 → 接收。
                   if (e.dataTransfer.getData('application/x-filefix-image') !== '' && item.mediaType.startsWith('image/')) {
                     e.preventDefault()
                     setFileDrop(true)
@@ -485,12 +424,6 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
                 <button type="button" style={s.remove} aria-label={'移除 ' + item.name} onClick={e => { e.stopPropagation(); removeFile(item) }}>×</button>
               </div>
             ))}
-            {items.length === 0 && pageDrag && (
-              <div style={dropPlaceholder}>
-                <span style={dropIcon}>{'📄'}</span>
-                <span>{'释放到此处 → 以附件形式注入'}</span>
-              </div>
-            )}
           </div>
         </div>
       )}
