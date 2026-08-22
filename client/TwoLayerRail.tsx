@@ -1,11 +1,10 @@
 /** 两层横向拖放 rail：图像层（官方 draft images）+ 文件层（插件附件）。
  * - 接管 conversation.input.attachments slot（priority 覆盖官方 ComposerAttachments）。
- * - 图像层：官方 owner 提供的 draft images（attachments / onAddImages / onRemoveImage），
- *   图片拖到图像层 → 走官方 createDraftImages 链路（直接注入模型上下文）。
- * - 文件层：插件 UploadStore 的文件（persistFile + markPending），拖到文件层 →
- *   按插件文件逻辑以文本/文件形式注入。
- * - 空白区域 drop：按文件类型分流（图片 → 图像层，其他 → 文件层）。
- * - 视觉对齐 DSH：图像卡片 64px 圆角（官方 AttachmentRail 几何），文件层沿用现有 chip。
+ * - 始终渲染两层放置区（即使无文件），让用户明确知道拖到哪。
+ * - 图像层：图片拖到此处 → 走官方 createDraftImages 链路（直接注入模型上下文）。
+ * - 文件层：任意文件拖到此处 → 走插件文件链路（字节入附件库 + 文本/文件注入）。
+ * - 每层空态：虚线放置卡片 + 图标 + 说明；有内容时显示横向项目列表。
+ * - 拖拽悬停：目标层高亮（边框变色 + 背景）。
  */
 
 import { useState, useSyncExternalStore } from 'react'
@@ -51,41 +50,83 @@ function extOf(name: string): string {
   return name.slice(dot + 1).slice(0, 4)
 }
 
-/** 样式（内联 style + 主题变量，与官方 AttachmentRail 几何对齐）。 */
+/** 每层放置区的样式。 */
 const layerStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 4,
+  gap: 6,
   minWidth: 0,
 }
 
-const layerLabel: CSSProperties = {
+/** 层标题行。 */
+const layerHeader: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
   color: 'var(--dsw-alias-label-caption)',
-  fontSize: 11,
+  fontSize: 12,
   lineHeight: 1,
   userSelect: 'none',
+  padding: '0 2px',
 }
 
-const layerScroll: CSSProperties = {
+const layerTitle: CSSProperties = {
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-primary)',
+  fontSize: 12,
+}
+
+const layerHint: CSSProperties = {
+  color: 'var(--dsw-alias-label-caption)',
+  fontSize: 11,
+  marginLeft: 'auto',
+}
+
+/** 放置区容器：有内容时横向滚动列表；空时虚线卡片。 */
+const dropZone: CSSProperties = {
   display: 'flex',
+  alignItems: 'center',
   gap: 10,
+  minHeight: 72,
+  padding: '8px 10px',
+  borderRadius: 12,
+  border: '1.5px dashed var(--dsw-alias-border-l4)',
+  background: 'color-mix(in srgb, var(--dsw-alias-interactive-bg-hover) 40%, transparent)',
   overflowX: 'auto',
   overflowY: 'hidden',
   scrollbarWidth: 'none',
-  paddingBottom: 2,
-  minHeight: 30,
-  alignItems: 'center',
-  borderRadius: 8,
-  transition: 'background 0.15s ease, box-shadow 0.15s ease',
+  transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
 }
 
-/** 拖放悬停高亮（用于目标层）。 */
-const layerDropActive: CSSProperties = {
+const dropZoneFilled: CSSProperties = {
+  borderStyle: 'solid',
+  borderColor: 'var(--dsw-alias-border-l4)',
+}
+
+/** 拖拽悬停高亮。 */
+const dropZoneActive: CSSProperties = {
+  borderColor: 'var(--dsw-alias-interactive-bg-hover)',
   background: 'var(--dsw-alias-interactive-bg-hover)',
-  boxShadow: '0 0 0 1px var(--dsw-alias-border-l4) inset',
+  boxShadow: '0 0 0 1px var(--dsw-alias-border-l3) inset',
+}
+
+/** 空态占位提示。 */
+const dropPlaceholder: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  color: 'var(--dsw-alias-label-caption)',
+  fontSize: 12,
+  margin: '0 auto',
+  padding: '6px 0',
+  userSelect: 'none',
+  whiteSpace: 'nowrap',
+}
+
+const dropIcon: CSSProperties = {
+  fontSize: 18,
+  opacity: 0.7,
+  flex: 'none',
 }
 
 const imageItem: CSSProperties = {
@@ -135,18 +176,7 @@ export interface TwoLayerRailProps extends ComposerAttachmentsOwnerProps {
   sessionId?: string | undefined
 }
 
-/** 空白区 drop 分流：图片 → 图像层，其他 → 文件层。 */
-function splitByType(files: readonly File[]): { images: File[]; others: File[] } {
-  const images: File[] = []
-  const others: File[] = []
-  for (const file of files) {
-    if (file.type.startsWith('image/')) images.push(file)
-    else others.push(file)
-  }
-  return { images, others }
-}
-
-export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
+export function TwoLayerRail(props: TwoLayerRailProps): ReactElement {
   const {
     attachments, canAcceptDrop, onAddImages, onRemoveImage,
     sessionId,
@@ -168,7 +198,6 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
 
   const hasImage = attachments.length > 0
   const hasFile = items.length > 0
-  if (!hasImage && !hasFile) return null
 
   // 拖放：目标层 drop 处理。
   const dropToImages = (files: readonly File[]): void => {
@@ -187,7 +216,10 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
     return {
       onDragEnter: (e: ReactDragEvent) => { if (hasFiles(e)) { e.preventDefault(); setActive(true) } },
       onDragOver: (e: ReactDragEvent) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' } },
-      onDragLeave: () => { setActive(false) },
+      onDragLeave: (e: ReactDragEvent) => {
+        // 只有离开当前层才取消高亮（避免子元素抖动）。
+        if (hasFiles(e) && e.currentTarget === e.target) setActive(false)
+      },
       onDrop: (e: ReactDragEvent) => {
         if (!hasFiles(e)) return
         e.preventDefault()
@@ -212,54 +244,81 @@ export function TwoLayerRail(props: TwoLayerRailProps): ReactElement | null {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-      {hasImage && (
-        <div style={layerStyle} data-filefix-layer="image">
-          <div style={layerLabel}>{'🖼'} 图像层（直接注入模型）</div>
-          <div
-            style={{ ...layerScroll, ...(imageDrop ? layerDropActive : {}) }}
-            data-filefix-image-drop
-            {...layerHandlers('image')}
-          >
-            {attachments.map(attachment => (
-              <div key={attachment.id} style={imageItem}>
-                <div style={imageThumb}>
-                  <img style={imageThumbImg} src={attachment.previewUrl} alt={attachment.file.name} />
-                </div>
-                <button
-                  type="button"
-                  style={imageRemove}
-                  aria-label={'移除 ' + attachment.file.name}
-                  onClick={() => onRemoveImage(attachment.id)}
-                >×</button>
-              </div>
-            ))}
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }} data-filefix-two-layer>
+      {/* 图像层：始终渲染放置区 */}
+      <div style={layerStyle} data-filefix-layer="image">
+        <div style={layerHeader}>
+          <span style={dropIcon}>{'🖼'}</span>
+          <span style={layerTitle}>图像层</span>
+          <span style={layerHint}>图片 → 直接注入模型</span>
         </div>
-      )}
-      {hasFile && (
-        <div style={layerStyle} data-filefix-layer="file">
-          <div style={layerLabel}>{'📎'} 文件层（以文件/文字注入）</div>
-          <div
-            style={{ ...layerScroll, ...(fileDrop ? layerDropActive : {}) }}
-            data-filefix-file-drop
-            {...layerHandlers('file')}
-          >
-            {items.map(item => (
-              <div key={item.id} style={s.chip} title={item.name}>
-                {item.thumbnail !== undefined
-                  ? <img style={s.thumb} src={item.thumbnail} alt="" />
-                  : <span style={s.extBadge}>{extOf(item.name)}</span>}
-                <span style={s.name}>{item.name}</span>
-                <span style={s.meta}>
-                  {item.status === 'uploading' ? '上传中…' : item.status === 'done' ? humanSize(item.size) : item.error}
-                </span>
-                <button type="button" style={s.remove} aria-label={'移除 ' + item.name} onClick={e => { e.stopPropagation(); removeFile(item) }}>×</button>
+        <div
+          style={{
+            ...dropZone,
+            ...(hasImage ? dropZoneFilled : {}),
+            ...(imageDrop ? dropZoneActive : {}),
+          }}
+          data-filefix-image-drop
+          {...layerHandlers('image')}
+        >
+          {attachments.length === 0 && (
+            <div style={dropPlaceholder}>
+              <span style={dropIcon}>{'🖼'}</span>
+              <span>{'拖图片到这里，直接加入模型上下文'}</span>
+            </div>
+          )}
+          {attachments.map(attachment => (
+            <div key={attachment.id} style={imageItem}>
+              <div style={imageThumb}>
+                <img style={imageThumbImg} src={attachment.previewUrl} alt={attachment.file.name} />
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                style={imageRemove}
+                aria-label={'移除 ' + attachment.file.name}
+                onClick={() => onRemoveImage(attachment.id)}
+              >×</button>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
+
+      {/* 文件层：始终渲染放置区 */}
+      <div style={layerStyle} data-filefix-layer="file">
+        <div style={layerHeader}>
+          <span style={dropIcon}>{'📎'}</span>
+          <span style={layerTitle}>文件层</span>
+          <span style={layerHint}>任意文件 → 以文件/文字注入</span>
+        </div>
+        <div
+          style={{
+            ...dropZone,
+            ...(hasFile ? dropZoneFilled : {}),
+            ...(fileDrop ? dropZoneActive : {}),
+          }}
+          data-filefix-file-drop
+          {...layerHandlers('file')}
+        >
+          {items.length === 0 && (
+            <div style={dropPlaceholder}>
+              <span style={dropIcon}>{'📄'}</span>
+              <span>{'拖文件到这里，以附件形式注入'}</span>
+            </div>
+          )}
+          {items.map(item => (
+            <div key={item.id} style={s.chip} title={item.name}>
+              {item.thumbnail !== undefined
+                ? <img style={s.thumb} src={item.thumbnail} alt="" />
+                : <span style={s.extBadge}>{extOf(item.name)}</span>}
+              <span style={s.name}>{item.name}</span>
+              <span style={s.meta}>
+                {item.status === 'uploading' ? '上传中…' : item.status === 'done' ? humanSize(item.size) : item.error}
+              </span>
+              <button type="button" style={s.remove} aria-label={'移除 ' + item.name} onClick={e => { e.stopPropagation(); removeFile(item) }}>×</button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
