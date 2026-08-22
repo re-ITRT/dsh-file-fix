@@ -8,6 +8,7 @@ import { readVisionConfig, writeVisionConfig } from './vision.ts'
 import type { VisionConfig } from './vision.ts'
 import { readCleanupConfig, writeCleanupConfig, runCleanup, cleanupStatsOf } from './cleanup.ts'
 import type { CleanupConfig, CleanupRunResult, CleanupStats } from './cleanup.ts'
+import { sessionNeedsVision } from './vision-state.ts'
 import type { FilesAttachedEntry, VisionCandidateProvider } from './types.ts'
 import type { FileAttachmentStore } from './store.ts'
 import type {
@@ -229,6 +230,17 @@ export class UploadService extends TypertRemoteService {
       })
     }
     return { ok: true, providers }
+  }
+
+  @Remote('getSessionNeedsVision')
+  async getSessionNeedsVision(request: { sessionId: string }): Promise<{ ok: true; needsVision: boolean }> {
+    return { ok: true, needsVision: sessionNeedsVision(request.sessionId) }
+  }
+
+  /** 模型视觉能力速查：provider → models → image（与 listVisionCandidates 同源，供模型切换置灰）。 */
+  @Remote('listModelVisionSupport')
+  async listModelVisionSupport(): Promise<{ ok: true; providers: VisionCandidateProvider[] }> {
+    return this.listVisionCandidates()
   }
 
   @Remote('unmarkPending')

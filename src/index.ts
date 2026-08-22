@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.ts'
 import { installAttachmentBridge } from './attach.ts'
 import { installVisionRoute } from './vision.ts'
+import { installVisionStateTracking, rebuildVisionState } from './vision-state.ts'
 import { registerDownloadRoute } from './http.ts'
 import { UploadService } from './remote.ts'
 import { FileAttachmentStore } from './store.ts'
@@ -25,6 +26,10 @@ export function apply(ctx: Context, config: Config): void {
   ctx.logger.info('[dsh-file-fix] attachment store at %s', store.root)
 
   installAttachmentBridge(ctx, service)
+  installVisionStateTracking(ctx)
+  ctx.on('agent/session-start', ({ agent }) => {
+    void rebuildVisionState(ctx, agent.id)
+  })
   registerReadAttachmentTool(ctx, store, config)
   registerPlaceAttachmentTool(ctx, store, config)
   installVisionRoute(ctx, store)

@@ -321,6 +321,37 @@ export const UPLOAD_TYPERT_REMOTE: TypertRemoteContribution = {
       result: { mode: 'strict', typeSymbol: 'dsh-file-fix#UnmarkPendingOutcome', schema: unmarkPendingOutcome$schema },
     },
     {
+      id: 'dsh-file-fix#filefix/getSessionNeedsVision',
+      service: 'filefix',
+      namespace: 'filefix',
+      method: 'getSessionNeedsVision',
+      invocation: { kind: 'direct' },
+      parameters: [{
+        name: 'request',
+        wire: 'request',
+        source: 'json',
+        codec: { mode: 'strict', typeSymbol: 'dsh-file-fix#SessionNeedsVisionRequest', schema: z.object({ sessionId: z.string() }).readonly() },
+      }],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-file-fix#SessionNeedsVisionResult',
+        schema: z.object({ ok: z.literal(true), needsVision: z.boolean() }).readonly(),
+      },
+    },
+    {
+      id: 'dsh-file-fix#filefix/listModelVisionSupport',
+      service: 'filefix',
+      namespace: 'filefix',
+      method: 'listModelVisionSupport',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-file-fix#ListModelVisionSupportResult',
+        schema: z.object({ ok: z.literal(true), providers: z.array(visionCandidate$schema) }).readonly(),
+      },
+    },
+    {
       id: 'dsh-file-fix#filefix/getCleanupConfig',
       service: 'filefix',
       namespace: 'filefix',
@@ -397,6 +428,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     setVisionConfig: (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
     testVisionModel: (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
     listVisionCandidates: () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
+    getSessionNeedsVision: (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; needsVision: boolean }>>
+    listModelVisionSupport: () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
     getCleanupConfig: () => Promise<RemoteResult<{ ok: true; config: CleanupConfig }>>
     setCleanupConfig: (request: { config: Partial<CleanupConfig> }) => Promise<RemoteResult<{ ok: true }>>
     runCleanup: () => Promise<RemoteResult<{ ok: true; result: CleanupRunResult }>>
@@ -415,6 +448,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'filefix/setVisionConfig': (request: { config: { provider?: string; model?: string } }) => Promise<RemoteResult<{ ok: true }>>
     'filefix/testVisionModel': (request: { provider: string; model: string }) => Promise<RemoteResult<{ ok: boolean; image: boolean; error?: string }>>
     'filefix/listVisionCandidates': () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
+    'filefix/getSessionNeedsVision': (request: { sessionId: string }) => Promise<RemoteResult<{ ok: true; needsVision: boolean }>>
+    'filefix/listModelVisionSupport': () => Promise<RemoteResult<{ ok: true; providers: { provider: string; displayName: string; models: { id: string; name: string; image: boolean }[] }[] }>>
     'filefix/getCleanupConfig': () => Promise<RemoteResult<{ ok: true; config: CleanupConfig }>>
     'filefix/setCleanupConfig': (request: { config: Partial<CleanupConfig> }) => Promise<RemoteResult<{ ok: true }>>
     'filefix/runCleanup': () => Promise<RemoteResult<{ ok: true; result: CleanupRunResult }>>
