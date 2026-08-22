@@ -1,6 +1,6 @@
 /** 统一上传 rail 的声明式 store：items 三态 + 提示文案。 */
 
-import { defineStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
 
 export type UploadStatus = 'uploading' | 'done' | 'error'
 
@@ -26,6 +26,7 @@ export interface UploadState {
   notice: string | null
 }
 
+/** 声明式 action 形状（官方范式：draft 首参 + 显式剩余参数）。 */
 export type UploadActions = {
   addUploading: (draft: UploadState, item: UploadItem) => void
   markDone: (draft: UploadState, id: string, attachmentId: string, size: number) => void
@@ -36,11 +37,11 @@ export type UploadActions = {
   setNotice: (draft: UploadState, notice: string | null) => void
 }
 
-export const createUploadStore = () => defineStore<UploadState, UploadActions>({
-  init: () => ({ items: [], notice: null }),
+export const createUploadStore = (): EngineStoreHandle<UploadState, UploadActions> => defineStore({
+  init: (): UploadState => ({ items: [], notice: null }),
   actions: {
-    addUploading: (draft, item) => { draft.items.push(item) },
-    markDone: (draft, id, attachmentId, size) => {
+    addUploading: (draft: UploadState, item: UploadItem) => { draft.items.push(item) },
+    markDone: (draft: UploadState, id: string, attachmentId: string, size: number) => {
       const item = draft.items.find(entry => entry.id === id)
       if (item !== undefined) {
         item.status = 'done'
@@ -49,24 +50,24 @@ export const createUploadStore = () => defineStore<UploadState, UploadActions>({
         item.error = undefined
       }
     },
-    markError: (draft, id, error) => {
+    markError: (draft: UploadState, id: string, error: string) => {
       const item = draft.items.find(entry => entry.id === id)
       if (item !== undefined) {
         item.status = 'error'
         item.error = error
       }
     },
-    setThumbnail: (draft, id, thumbnail) => {
+    setThumbnail: (draft: UploadState, id: string, thumbnail: string) => {
       const item = draft.items.find(entry => entry.id === id)
       if (item !== undefined) item.thumbnail = thumbnail
     },
-    removeItem: (draft, id) => {
+    removeItem: (draft: UploadState, id: string) => {
       draft.items = draft.items.filter(item => item.id !== id)
     },
-    clearAll: (draft) => {
+    clearAll: (draft: UploadState) => {
       draft.items = []
     },
-    setNotice: (draft, notice) => { draft.notice = notice },
+    setNotice: (draft: UploadState, notice: string | null) => { draft.notice = notice },
   },
 })
 

@@ -1,16 +1,26 @@
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { execFileSync } from 'node:child_process'
 
-// esbuild 解析：本地 junction 优先，缺失时用 deepseek-harness 源码树的版本兜底。
+// esbuild 解析：本地 devDep 优先，缺失时用全局 esbuild 兜底。
 const require = createRequire(import.meta.url)
-const REPO_ESBUILD = 'C:/Users/19404/hermes-workspace/deepseek-harness/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild'
 
-let build
-try {
-  ;({ build } = await import('esbuild'))
-} catch {
-  ;({ build } = require(REPO_ESBUILD))
+async function resolveBuild() {
+  try {
+    // 本地 esbuild（devDependencies）优先。
+    return (await import('esbuild')).build
+  } catch {
+    // 兜底：全局 npm 安装的 esbuild（npm root -g）。
+    const globalRoot = execFileSync('npm', ['root', '-g'], { encoding: 'utf8' }).trim()
+    try {
+      return require(require.resolve('esbuild', { paths: [globalRoot] })).build
+    } catch {
+      throw new Error('[dsh-file-fix] esbuild not found — run `npm install` (local devDep) or `npm install -g esbuild` (fallback)')
+    }
+  }
 }
+
+const build = await resolveBuild()
 
 const id = 'dsh-file-fix'
 const barePath = 'dist/client.bare.js'

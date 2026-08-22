@@ -56,12 +56,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
   setFilefixNodeUpload(upload)
   setVisionUpload(upload)
   setRetentionUpload(upload)
+
   ctx.conversationEvents.register(filefixFilesDefinition)
   ctx.slots.inject('conversation.chat.node', () => {
     const dispose = ctx.slots.register({
       name: 'conversation.chat.node',
       key: 'filefix-files',
     }, FilefixFilesNodeView as unknown as (props: unknown) => ReactElement | null)
+
     return () => { dispose() }
   })
 

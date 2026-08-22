@@ -99,8 +99,12 @@ export function setFilefixNodeUpload(value: UploadRemote | undefined): void {
 }
 
 /** 字节可用性（下载按钮置灰依据）——渲染时经 remote checkAvailable 查询一次。 */
+type FileWithAvailable = UploadedFile & { available?: boolean }
+
 export function FilefixFilesNodeView({ node }: ChatNodeViewProps<'filefix-files'>): ReactElement | null {
-  const files = node.data.files
+  // 显式标注：published 类型的 mapped-type 交叉在 bundler 解析下 .map 回调
+  // 推断退化（TS 对 `ChatConversationViewNode & { data }` 交叉的已知行为）。
+  const files: readonly FileWithAvailable[] = node.data.files
   const [availability, setAvailability] = useState<Map<string, boolean> | null>(null)
 
   useEffect(() => {
@@ -115,7 +119,7 @@ export function FilefixFilesNodeView({ node }: ChatNodeViewProps<'filefix-files'
     return () => { cancelled = true }
   }, [files])
 
-  const withAvailable = files.map(file => ({
+  const withAvailable: FileWithAvailable[] = files.map(file => ({
     ...file,
     available: availability === null ? file.available : (availability.get(file.attachmentId) ?? false),
   }))

@@ -86,7 +86,6 @@ export async function uploadOne(
  */
 export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via: string): Promise<void> {
   const { actions, getLimits, logger } = deps
-  console.log('[dsh-file-fix:debug] intakeFiles', via, files.length, files.map(f => f.name).join(','))
   logger.info(
     '[dsh-file-fix] intake files=%d images=%d others=%d via=%s',
     files.length,
@@ -137,9 +136,7 @@ export async function intakeFiles(deps: IntakeDeps, files: readonly File[], via:
   }
 
   if (uploaded.length > 0) {
-    console.log('[dsh-file-fix:debug] calling markPending', via, uploaded.length)
     void deps.remote.markPending({ sessionId: deps.sessionId, files: uploaded }).then(result => {
-      console.log('[dsh-file-fix:debug] markPending result', result.ok ? 'ok' : JSON.stringify(result.error))
       logger.info(
         '[dsh-file-fix] markPending %s: %d file(s) -> %s',
         via, uploaded.length, result.ok ? 'ok' : `failed ${result.error}`,

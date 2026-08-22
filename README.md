@@ -17,8 +17,8 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
 
 ## 方案
 
-- 任何文件 drop / 粘贴 / 📎 选择 → 字节上传（`uploadux/persistFile`）→ host 存入**内容寻址附件库**
-  `~/.dsh/attachments/uploadux/`（sha256 去重，manifest.jsonl 索引）——与工作区完全解耦
+- 任何文件 drop / 粘贴 / 📎 选择 → 字节上传（`filefix/persistFile`）→ host 存入**内容寻址附件库**
+  `~/.dsh/attachments/filefix/`（sha256 去重，manifest.jsonl 索引）——与工作区完全解耦
 - 发送时（`agent/pre-step`）注入文件清单消息（role=user + plugin 来源 + notice 表单：
   UI 只显示「📎 附件 N 个文件」一行摘要，模型读到完整清单与 attachment_id）
 - **模型侧工具**：
@@ -26,20 +26,23 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
     48 KB 避开 dsh spill-policy 的 50 KB 内联阈值）；大文件自动镜像完整副本到工作区
     `.dsh-uploadux/reads/`（官方 `read` 工具在 spill-policy 中豁免，可读全量）
   - `place_attachment`：把附件字节导出到会话工作区任意路径（边界校验，防 `../` 逃逸）
-- 历史消息：`uploadux/files` 会话事件（ignorable）记录「消息 ↔ 文件」关联，客户端
-  shadow 官方 user 节点渲染器，在文字气泡下方渲染文件列表气泡（文件名+大小+下载链接，
-  下载走 `/plugins/dsh-file-fix/download/<attachmentId>`，限 API token）
+- 历史消息：`filefix/files` 会话事件（ignorable）记录「消息 ↔ 文件」关联，客户端
+  注册官方 Conversation Node（`conversationEvents` Definition + keyed renderer），
+  在文字气泡下方渲染文件列表气泡（文件名+大小+下载链接，
+  下载走 `/plugins/dsh-file-fix/download/<attachmentId>`）
 - 交互照 Hermes：统一 rail 混排（缩略图降采样队列）、chip 三态（上传中/完成/失败点击重试）、
   删除 chip 连带删附件、Esc 取消拖拽、深度计数防闪烁、drop 后焦点回输入框
 - 限制（插件 config 可覆盖）：单文件 50 MB、每批 20 个、批量总量 200 MB；超限整批拒绝 + 提示
 
 ## 结构
 
-- `src/` host 侧：`upload` Typert Remote 服务（persistFile / limits / remove / markPending /
-  listFiles）+ 附件库（内容寻址）+ 桥（session 事件监听 → 关联表 + pre-step 注入）+
+- `src/` host 侧：`filefix` Typert Remote 服务（persistFile / limits / removeFile /
+  markPending / unmarkPending / listFiles / checkAvailable + 清理/视觉配置 RPC）+
+  附件库（内容寻址）+ 桥（session 事件监听 → 关联表 + pre-step 注入）+
   `read_attachment` / `place_attachment` 工具 + 下载路由
 - `client/` 浏览器侧：document 级 drop/paste 拦截（捕获阶段）＋ rail + 📎 选择按钮 +
-  文件气泡（shadow `conversation.chat.node` 的 user/steering 键）
+  文件气泡（官方 Conversation Node：`filefix-files` Definition + keyed renderer，
+  挂在 `conversation.chat.node` slot 下）+ 设置页（视觉辅助 / 附件清理）
 - `scripts/build-client.mjs` client bundle 构建（esbuild CJS + `__ModuleLoader__` 外壳，zod 内联）
 - `scripts/repair-sessions.mjs` 会话日志修复工具（帧级 zstd 解压 → 清洗 → 重压；曾用于清除
   早期版本误存进日志的 system 角色消息）
@@ -91,10 +94,10 @@ node scripts/mk-junction.cjs "<你的 dsh profile>/web/node_modules/dsh-file-fix
 # 2. profile 保持干净（不 npm install 任何 @deepseek-ai 包）：
 #    ~/.dsh/profiles/web/ 里只有 package.json（bundles 声明）+ cordis.patch.yml
 #    —— 运行时会由 dsh 自动 heal 出 ~/.dsh/profiles/node_modules 源码链接
-# 3. 本项目依赖解析指向 heal 产物：
-node scripts/mk-junction.cjs node_modules "C:\Users\<user>\.dsh\profiles\node_modules"
+# 3. 本项目依赖解析指向 heal 产物（Linux/macOS 用 ln -s）：
+ln -s "$DSH_HOME/profiles/node_modules" node_modules  # 或 npm install + 手动链接 @deepseek-ai 包
 # 4. 让 profile 能以包名解析本项目（client 插件发现机制需要）：
-node scripts/mk-junction.cjs "C:\Users\<user>\.dsh\profiles\web\node_modules\dsh-file-fix" "C:\Users\<user>\hermes-workspace\dsh-file-fix"
+ln -s "$PWD" "$DSH_HOME/profiles/<profile>/node_modules/dsh-file-fix"
 ```
 
 开发循环（在 deepseek-harness 目录跑）：
