@@ -34,6 +34,17 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
   删除 chip 连带删附件、Esc 取消拖拽、深度计数防闪烁、drop 后焦点回输入框
 - 限制（插件 config 可覆盖）：单文件 50 MB、每批 20 个、批量总量 200 MB；超限整批拒绝 + 提示
 
+## 两层横向拖放 UI + 视觉上下文
+
+- **两层横向列表**（与 DSH 同一审美）：
+  - **图像层**：图片拖到这里 → 走官方图片注入链路（直接进模型上下文）
+  - **文件层**：任意文件拖到这里 → 走插件文件链路（字节入附件库 + 文本/文件注入）
+  - 空白区 drop 按文件类型自动分流（图片 → 图像层，其他 → 文件层）
+- **视觉上下文标记**：session 含任何直接图片注入（draft image 提交、read_image /
+  add_image_to_context 的调用结果）即标记为「需要视觉」；visual_assist（返回文本）不标记。
+- **模型切换限制**：当 session 需要视觉时，模型选择器中**不支持图片输入的模型置灰不可选**；
+  从不需要视觉的 session 切换则无限制。
+
 ## 结构
 
 - `src/` host 侧：`filefix` Typert Remote 服务（persistFile / limits / removeFile /
