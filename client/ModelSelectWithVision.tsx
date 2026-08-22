@@ -1,105 +1,69 @@
-/** 模型选择器（视觉置灰版）：接管 conversation.input.model seat。
- * - 通过模块级注入从 ctx.modelDirectories 获取 per-session ModelDirectory（因为
- *   shadow 注册拿不到官方 ui-model-selection 的 inject 面）。
- * - 当当前 session 需要视觉（直接图片注入）时，无视觉能力的模型 disabled 不可选。
- * - 视觉能力来自 listModelVisionSupport RPC（host 端 resolveModelInfo 判定模态）。
- * - UI 精简自官方 ModelSelect：触发按钮 + provider 分组列表，对齐 DSH 审美。
+/**
+ * 模型选择器（完整复制官方 ModelSelect + 视觉置灰）。
+ * - UI/交互/两级菜单/推理等级/Toast/键盘导航：与官方 @deepseek-ai/dsh-client-ui-model-selection
+ *   的 ModelSelect 完全一致（复制官方实现，CSS 注入保持外观一致）。
+ * - 唯一差异：模型选项的 disabled 增加视觉置灰——当当前 session 需要视觉
+ *   （直接图片注入）时，不支持图片输入的模型置灰不可选。
+ * - 数据来自模块级注入的 ctx.modelDirectories（shadow 注册拿不到官方 inject 面）。
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent, CSSProperties, ReactElement } from 'react'
-import type { ModelProviderGroup, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
+import {
+  useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
+  type KeyboardEvent, type FocusEvent,
+} from 'react'
+import type { ReactElement } from 'react'
+import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { UploadRemote } from './remote.ts'
-import { fetchSessionNeedsVision, cachedSessionNeedsVision } from './vision-context.ts'
-
-/** 样式（内联 + 主题变量，对齐 DSH MenuDropdown）。 */
-const rootStyle: CSSProperties = { position: 'relative' }
-
-const triggerStyle: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  height: 28,
-  padding: '0 8px',
-  border: '1px solid var(--dsw-alias-border-l4)',
-  borderRadius: 8,
-  background: 'var(--dsw-alias-interactive-bg-hover)',
-  color: 'var(--dsw-alias-label-primary)',
-  fontSize: 12,
-  cursor: 'pointer',
-  maxWidth: 200,
-}
-
-const triggerLabel: CSSProperties = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-}
-
-const visionBadge: CSSProperties = {
-  flex: 'none',
-  fontSize: 10,
-  color: 'var(--dsw-alias-label-caption)',
-}
-
-const menuStyle: CSSProperties = {
-  position: 'absolute',
-  right: 0,
-  bottom: 'calc(100% + 6px)',
-  minWidth: 260,
-  maxHeight: 320,
-  overflowY: 'auto',
-  padding: 6,
-  borderRadius: 12,
-  border: '1px solid var(--dsw-alias-border-l4)',
-  background: 'var(--dsw-alias-bg-l2)',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-  zIndex: 40,
-}
-
-const groupTitleStyle: CSSProperties = {
-  padding: '6px 8px 4px',
-  color: 'var(--dsw-alias-label-caption)',
-  fontSize: 11,
-  fontWeight: 600,
-}
-
-const optionStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 8,
-  width: '100%',
-  padding: '6px 8px',
-  border: 'none',
-  borderRadius: 8,
-  background: 'transparent',
-  color: 'var(--dsw-alias-label-primary)',
-  fontSize: 13,
-  textAlign: 'left',
-  cursor: 'pointer',
-}
-
-const optionDisabled: CSSProperties = {
-  opacity: 0.4,
-  cursor: 'not-allowed',
-}
-
-const optionSelected: CSSProperties = {
-  background: 'var(--dsw-alias-interactive-bg-hover)',
-}
-
-const optionVision: CSSProperties = {
-  flex: 'none',
-  fontSize: 11,
-  color: 'var(--dsw-alias-label-caption)',
-}
+import type { ModelProviderGroup } from '@deepseek-ai/dsh-api-remotes/client'
 
 type ModelItem = ModelProviderGroup['models'][number]
+import type { UploadRemote } from './remote.ts'
+import { fetchSessionNeedsVision, cachedSessionNeedsVision } from './vision-context.ts'
+import { MODEL_SELECT_CSS } from './model-select.css.ts'
 
-/** 模型视觉支持速查：provider/model → 是否支持图片输入。 */
-export type ModelVisionMap = ReadonlyMap<string, boolean>
+let cssInjected = false
+function injectModelSelectCss(): void {
+  if (cssInjected || typeof document === 'undefined') return
+  cssInjected = true
+  const el = document.createElement('style')
+  el.dataset.filefixModelSelect = '1'
+  el.textContent = MODEL_SELECT_CSS
+  ;(document.head ?? document.documentElement).appendChild(el)
+}
+
+/** 简单 class 合并（替代 clsx，类名固定）。 */
+function cx(...classes: Array<string | false | undefined | null>): string {
+  return classes.filter(Boolean).join(' ')
+}
+
+/** 官方文案（zh）。 */
+const T = {
+  'trigger.fallback': '选择模型',
+  'trigger.selectAria': '选择模型',
+  'trigger.aria': '选择模型，当前 {model}',
+  'trigger.ariaEffort': '选择模型，当前 {model}，推理等级 {effort}',
+  'menu.aria': '模型与推理等级',
+  'menu.model': '模型',
+  'menu.effort': '推理等级',
+  'effort.providerDefault': 'Default',
+  'status.loading': '正在刷新模型列表…',
+  'error.action': '模型操作失败：{message}',
+  'action.reload': '重新加载',
+  'warning.groupLoad': '{name} 加载失败：{message}',
+  'empty.models': '没有可用的模型。',
+  'empty.efforts': '当前模型未提供推理等级。',
+} as const
+
+/** Which pane the dropdown shows: the two-row root or one drilled-in list. */
+type Pane = 'root' | 'model' | 'effort'
+
+/** One dynamic effort row; undefined means preserve the provider default. */
+interface EffortChoice {
+  key: string
+  effort: string | undefined
+  label: string
+  description?: string
+}
 
 /** per-session ModelDirectory 的最小注入面（来自 ctx.modelDirectories）。 */
 export interface ModelDirectoryLike {
@@ -107,6 +71,9 @@ export interface ModelDirectoryLike {
   load: () => void
   select: (selection: ModelSelection) => Promise<boolean>
 }
+
+/** 模型视觉支持速查：provider/model → 是否支持图片输入。 */
+export type ModelVisionMap = ReadonlyMap<string, boolean>
 
 /** 模块级注入面（slot 无自定义 inject，由 index.tsx 注入）。 */
 interface ModelSelectService {
@@ -126,7 +93,7 @@ export function setModelVisionSupport(upload: UploadRemote, map: ModelVisionMap,
   needsVisionValue = needsVision
 }
 
-/** 仅更新视觉需求（调试 / 视觉注入发生时调用）。 */
+/** 仅更新视觉需求（视觉注入发生时调用）。 */
 export function setModelNeedsVision(needsVision: boolean | null): void {
   needsVisionValue = needsVision
 }
@@ -149,24 +116,80 @@ export interface ModelSelectWithVisionProps {
   sessionId: string
 }
 
-export function ModelSelectWithVision(props: ModelSelectWithVisionProps): ReactElement | null {
-  const { locked, sessionId } = props
+export function ModelSelectWithVision({ locked, sessionId }: ModelSelectWithVisionProps): ReactElement | null {
+  injectModelSelectCss()
   const service = getModelService()
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement | null>(null)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
-
-  // 每个 session 一个 directory（模块级 service 提供）。
   const directory = service?.directoryFor(sessionId)
   const state = useSyncExternalStore(
     fn => directory?.store.subscribe(fn) ?? (() => {}),
-    () => directory?.store.getSnapshot() ?? { current: null, routable: null, groups: [], failures: [], status: 'idle', error: null },
+    () => directory?.store.getSnapshot() ?? { current: null, routable: null, groups: [], failures: [], status: 'idle' as const, error: null },
   )
+  const [open, setOpen] = useState(false)
+  const [pane, setPane] = useState<Pane>('root')
+  const lastActionRef = useRef<'load' | 'select'>('load')
+  const [toast, setToast] = useState<{ seq: number; text: string } | null>(null)
+  const toastSeq = useRef(0)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const id = useId()
   const upload = service?.upload ?? (null as unknown as UploadRemote)
+
+  const choices = useMemo(() => state.groups.flatMap((group: ModelProviderGroup) =>
+    group.models.map((model: ModelItem) => ({
+      group,
+      model,
+      selection: {
+        provider: group.id,
+        model: model.id,
+        ...model.reasoning?.defaultEffort === undefined
+          ? {}
+          : { reasoningEffort: model.reasoning.defaultEffort },
+      } satisfies ModelSelection,
+    }))), [state.groups])
+  const selectedIndex = state.current === null
+    ? -1
+    : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
+  const currentChoice = choices[selectedIndex]
+  const reasoning = currentChoice?.model.reasoning
+  const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
+  const effortLabel = reasoning === undefined
+    ? undefined
+    : effectiveEffort === undefined
+      ? T['effort.providerDefault']
+      : reasoning.efforts.find((level: ModelReasoningEffort) => level.id === effectiveEffort)?.name ?? effectiveEffort
+  const effortChoices = useMemo<readonly EffortChoice[]>(() => reasoning === undefined
+    ? []
+    : [
+      ...reasoning.defaultEffort === undefined
+        ? [{ key: 'provider-default', effort: undefined, label: T['effort.providerDefault'] }]
+        : [],
+      ...reasoning.efforts.map((effort: ModelReasoningEffort) => ({
+        key: 'effort:' + effort.id,
+        effort: effort.id,
+        label: effort.name,
+        ...effort.description === undefined ? {} : { description: effort.description },
+      })),
+    ], [reasoning])
+  const busy = state.status === 'selecting'
+
+  // 视觉需求：拉取一次。
+  useEffect(() => {
+    if (getModelNeedsVision() !== null || upload === null) return
+    void fetchSessionNeedsVision(upload, sessionId)
+  }, [upload, sessionId])
+
+  const reload = (): void => {
+    lastActionRef.current = 'load'
+    directory?.load()
+  }
 
   // Mount-time load resolves the trigger label; every open refreshes.
   useEffect(() => {
-    if (directory !== undefined) directory.load()
+    if (directory !== undefined) {
+      lastActionRef.current = 'load'
+      directory.load()
+    }
   }, [directory])
 
   useEffect(() => {
@@ -178,89 +201,252 @@ export function ModelSelectWithVision(props: ModelSelectWithVisionProps): ReactE
     return () => { document.removeEventListener('mousedown', closeOutside) }
   }, [open])
 
-  // 视觉需求：拉取一次。
-  useEffect(() => {
-    if (getModelNeedsVision() !== null) return
-    void fetchSessionNeedsVision(upload, sessionId)
-  }, [upload, sessionId])
-
-  const needsVisionResolved = getModelNeedsVision() ?? cachedSessionNeedsVision(sessionId) ?? false
-
-  const currentChoice = state.groups
-    .flatMap((group: ModelProviderGroup) => group.models.map((model: ModelItem) => ({ group, model })))
-    .find(c => state.current?.provider === c.group.id && state.current.model === c.model.id)
-  const modelLabel = currentChoice?.model.name ?? state.current?.model ?? '选择模型'
-
-  const choose = (selection: ModelSelection): void => {
-    setOpen(false)
-    if (state.current?.provider === selection.provider && state.current.model === selection.model) return
-    if (directory !== undefined) void directory.select(selection)
+  const show = (): void => {
+    setPane('root')
+    setOpen(true)
+    reload()
   }
 
-  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
-    if (e.key === 'Escape' && open) {
-      e.preventDefault()
-      setOpen(false)
-      queueMicrotask(() => { triggerRef.current?.focus() })
+  const close = (restoreFocus = false): void => {
+    setOpen(false)
+    setPane('root')
+    if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
+  }
+
+  const moveFocus = (offset: number): void => {
+    const items = itemRefs.current.filter(item => item !== null)
+    if (items.length === 0) return
+    const active = items.findIndex(item => item === document.activeElement)
+    const next = (Math.max(active, 0) + offset + items.length) % items.length
+    items[next]?.focus()
+  }
+
+  const onRootKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      if (pane !== 'root') setPane('root')
+      else close(true)
+      return
+    }
+    if (!open) return
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      moveFocus(event.key === 'ArrowDown' ? 1 : -1)
     }
   }
 
-  const modelVision = (group: string, model: string): boolean => getModelVisionMap().get(group + '/' + model) ?? false
+  const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
+    if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return
+    close()
+  }
+
+  const settleSelection = (accepted: boolean): void => {
+    if (accepted) {
+      if (rootRef.current !== null) close(true)
+      return
+    }
+    const message = directory?.store.getSnapshot().error
+    if (message !== null && message !== undefined) {
+      toastSeq.current += 1
+      setToast({ seq: toastSeq.current, text: T['error.action'].replace('{message}', message) })
+    }
+  }
+
+  const choose = (selection: ModelSelection): void => {
+    if (state.current?.provider === selection.provider && state.current.model === selection.model) {
+      close(true)
+      return
+    }
+    lastActionRef.current = 'select'
+    if (directory !== undefined) void directory.select(selection).then(settleSelection)
+  }
+
+  const chooseEffort = (effort: string | undefined): void => {
+    if (state.current === null) return
+    if (effectiveEffort === effort) {
+      close(true)
+      return
+    }
+    const selection: ModelSelection = {
+      provider: state.current.provider,
+      model: state.current.model,
+      ...effort === undefined ? {} : { reasoningEffort: effort },
+    }
+    lastActionRef.current = 'select'
+    if (directory !== undefined) void directory.select(selection).then(settleSelection)
+  }
+
+  const modelLabel = currentChoice?.model.name ?? T['trigger.fallback']
+  const triggerLabel = effortLabel === undefined ? modelLabel : modelLabel + ' · ' + effortLabel
+  const triggerAria = currentChoice === undefined
+    ? T['trigger.selectAria']
+    : effortLabel === undefined
+      ? T['trigger.aria'].replace('{model}', modelLabel)
+      : T['trigger.ariaEffort'].replace('{model}', modelLabel).replace('{effort}', effortLabel)
+  itemRefs.current = []
+  let itemIndex = 0
+  const itemRef = () => {
+    const at = itemIndex++
+    return (node: HTMLButtonElement | null) => { itemRefs.current[at] = node }
+  }
+
+  // 视觉置灰：session 需要视觉且该模型不支持图片输入 → disabled。
+  const needsVision = getModelNeedsVision() ?? cachedSessionNeedsVision(sessionId) ?? false
+  const visionMap = getModelVisionMap()
+  const visionDisabled = (group: string, model: string): boolean =>
+    needsVision && !visionMap.get(group + '/' + model)
 
   return (
-    <div ref={rootRef} style={rootStyle} onKeyDown={onKeyDown}>
+    <div ref={rootRef} className="filefix-ms-root" onKeyDown={onRootKeyDown} onBlur={onBlur}>
       <button
         ref={triggerRef}
         type="button"
-        style={triggerStyle}
-        aria-label={'选择模型，当前 ' + modelLabel}
+        className="filefix-ms-trigger"
+        aria-label={triggerAria}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={modelLabel}
+        aria-controls={open ? id + '-menu' : undefined}
+        title={triggerLabel}
         disabled={locked}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (open) close()
+          else show()
+        }}
       >
-        <span style={triggerLabel}>{modelLabel}</span>
-        {needsVisionResolved && <span style={visionBadge}>{'👁'}</span>}
-        <span style={visionBadge}>{'▾'}</span>
+        <span className="filefix-ms-triggerLabel">{modelLabel}</span>
+        {effortLabel !== undefined && <span className="filefix-ms-triggerEffort">{effortLabel}</span>}
+        <svg className={cx('filefix-ms-chevron', open && 'filefix-ms-chevronOpen')} width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
 
       {open && (
-        <div style={menuStyle} role="menu" aria-label="选择模型">
-          {state.status === 'loading' && <div style={groupTitleStyle}>加载中…</div>}
-          {state.failures.map(failure => (
-            <div key={failure.id} style={groupTitleStyle}>{failure.name}: 加载失败</div>
-          ))}
-          {state.groups.map((group: ModelProviderGroup) => (
-            <div key={group.id} role="group">
-              <div style={groupTitleStyle}>{group.name}</div>
-              {group.models.map((model: ModelItem) => {
-                const selected = state.current?.provider === group.id && state.current.model === model.id
-                const vision = modelVision(group.id, model.id)
-                const disabledByVision = needsVisionResolved && !vision
-                const style = {
-                  ...optionStyle,
-                  ...(selected ? optionSelected : {}),
-                  ...(disabledByVision ? optionDisabled : {}),
-                }
-                return (
+        <div
+          id={id + '-menu'}
+          className="filefix-ms-menu"
+          role="menu"
+          aria-label={T['menu.aria']}
+          aria-busy={state.status === 'loading' || busy}
+        >
+          {pane === 'root' && (
+            <>
+              <button ref={itemRef()} type="button" role="menuitem" className="filefix-ms-cell" onClick={() => { setPane('model') }}>
+                <span className="filefix-ms-cellLabel">{T['menu.model']}</span>
+                <span className="filefix-ms-cellValue">{modelLabel}</span>
+                <svg className="filefix-ms-cellChevron" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 3L9.5 7L5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {reasoning !== undefined && (
+                <button ref={itemRef()} type="button" role="menuitem" className="filefix-ms-cell" onClick={() => { setPane('effort') }}>
+                  <span className="filefix-ms-cellLabel">{T['menu.effort']}</span>
+                  <span className="filefix-ms-cellValue">{effortLabel}</span>
+                  <svg className="filefix-ms-cellChevron" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 3L9.5 7L5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              )}
+            </>
+          )}
+
+          {pane === 'model' && (
+            <>
+              {state.status === 'loading' && (
+                <div className="filefix-ms-status">{T['status.loading']}</div>
+              )}
+              {state.error !== null && lastActionRef.current === 'load' && (
+                <div className="filefix-ms-error">
+                  <span>{T['error.action'].replace('{message}', state.error)}</span>
+                  <button type="button" className="filefix-ms-retry" onClick={reload}>{T['action.reload']}</button>
+                </div>
+              )}
+              {state.failures.map(failure => (
+                <div className="filefix-ms-warning" key={failure.id}>
+                  <span>{T['warning.groupLoad'].replace('{name}', failure.name).replace('{message}', failure.message)}</span>
+                  <button type="button" className="filefix-ms-retry" onClick={reload}>{T['action.reload']}</button>
+                </div>
+              ))}
+              <div className="filefix-ms-groups">
+                {state.groups.map((group: ModelProviderGroup) => {
+                  const headingId = id + '-' + group.id
+                  return (
+                    <section role="group" aria-labelledby={headingId} className="filefix-ms-group" key={group.id}>
+                      <div className="filefix-ms-groupTitle" id={headingId}>{group.name}</div>
+                      {group.models.map((model: ModelItem) => {
+                        const selected = state.current?.provider === group.id && state.current.model === model.id
+                        const visDisabled = visionDisabled(group.id, model.id)
+                        return (
+                          <button
+                            ref={itemRef()}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={selected}
+                            className={cx('filefix-ms-option', selected && 'filefix-ms-selected')}
+                            key={model.id}
+                            title={visDisabled ? '此模型不支持图片输入，当前会话需要视觉' : model.name}
+                            disabled={busy || visDisabled}
+                            onClick={() => { choose({ provider: group.id, model: model.id }) }}
+                          >
+                            <span className="filefix-ms-optionCopy">
+                              <span className="filefix-ms-modelName">{model.name}</span>
+                              {model.description !== undefined && (
+                                <span className="filefix-ms-description">{model.description}</span>
+                              )}
+                            </span>
+                            <span className="filefix-ms-check">
+                              {selected ? (
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              ) : null}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </section>
+                  )
+                })}
+              </div>
+              {state.status === 'ready' && choices.length === 0 && (
+                <div className="filefix-ms-empty">{T['empty.models']}</div>
+              )}
+            </>
+          )}
+
+          {pane === 'effort' && (
+            <>
+              {state.error !== null && lastActionRef.current === 'load' && (
+                <div className="filefix-ms-error">
+                  <span>{T['error.action'].replace('{message}', state.error)}</span>
+                  <button type="button" className="filefix-ms-retry" onClick={reload}>{T['action.reload']}</button>
+                </div>
+              )}
+              {effortChoices.length === 0
+                ? <div className="filefix-ms-empty">{T['empty.efforts']}</div>
+                : effortChoices.map((level: EffortChoice) => (
                   <button
-                    key={model.id}
+                    ref={itemRef()}
                     type="button"
                     role="menuitemradio"
-                    aria-checked={selected}
-                    style={style}
-                    title={disabledByVision ? '此模型不支持图片输入，当前会话需要视觉' : model.name}
-                    disabled={disabledByVision || state.status === 'selecting'}
-                    onClick={() => choose({ provider: group.id, model: model.id })}
+                    aria-checked={effectiveEffort === level.effort}
+                    className={cx('filefix-ms-option', effectiveEffort === level.effort && 'filefix-ms-selected')}
+                    key={level.key}
+                    disabled={busy}
+                    onClick={() => { chooseEffort(level.effort) }}
                   >
-                    <span>{model.name}</span>
-                    <span style={optionVision}>{disabledByVision ? '不支持图片' : vision ? '支持图片' : ''}</span>
+                    <span className="filefix-ms-optionCopy">
+                      <span className="filefix-ms-modelName">{level.label}</span>
+                      {level.description !== undefined && (
+                        <span className="filefix-ms-description">{level.description}</span>
+                      )}
+                    </span>
+                    <span className="filefix-ms-check">
+                      {effectiveEffort === level.effort ? (
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      ) : null}
+                    </span>
                   </button>
-                )
-              })}
-            </div>
-          ))}
+                ))}
+            </>
+          )}
+        </div>
+      )}
+      {toast !== null && (
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 60, padding: '10px 14px', borderRadius: 10, background: 'var(--dsw-specific-menu)', border: '1px solid var(--dsw-alias-border-inverted)', boxShadow: 'var(--dsw-shadow-lv3)', color: 'var(--dsw-alias-label-primary)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM8 5v4M8 10.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+          <span>{toast.text}</span>
         </div>
       )}
     </div>
