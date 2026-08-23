@@ -7,7 +7,7 @@
  */
 
 import type { LoggerLike } from './upload-controller.ts'
-import { getBridgeSessionId, getTwoLayerHandle } from './two-layer-bridge.ts'
+import { getBridgeSessionId, getTwoLayerHandle, setPageDrag } from './two-layer-bridge.ts'
 
 /** 控制器依赖（模块级注入）。 */
 interface ControllerShare {
@@ -22,22 +22,6 @@ interface ControllerShare {
 let controllerShare: ControllerShare | null = null
 export function setTwoLayerController(share: ControllerShare): void {
   controllerShare = share
-}
-
-/** 页面级拖拽/粘贴激活状态（显示两层）。 */
-let pageDrag = false
-const pageDragListeners = new Set<() => void>()
-function setPageDrag(value: boolean): void {
-  if (pageDrag === value) return
-  pageDrag = value
-  for (const fn of [...pageDragListeners]) fn()
-}
-export function subscribePageDrag(fn: () => void): () => void {
-  pageDragListeners.add(fn)
-  return () => { pageDragListeners.delete(fn) }
-}
-export function getPageDrag(): boolean {
-  return pageDrag
 }
 
 let installed = false

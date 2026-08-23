@@ -4,8 +4,7 @@ import { useRef } from 'react'
 import type { ChangeEvent } from 'react'
 import { IconPaperclipOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { LoggerLike } from './upload-controller.ts'
-import { intakeFiles } from './upload-controller.ts'
-import { getUploadStoreActions } from './upload-store.ts'
+import { getTwoLayerHandle } from './two-layer-bridge.ts'
 import * as s from './styles.ts'
 
 /** 模块级注入面（slot 无自定义 inject）。 */
@@ -29,13 +28,9 @@ export function UploadPickerButton(props: UploadPickerProps): React.ReactElement
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
     if (files.length === 0) return
-    const share = getPickerShare()
-    if (share === null) return
-    void intakeFiles(
-      { sessionId, remote: share.upload, actions: getUploadStoreActions(), getLimits: share.getLimits, logger: share.logger },
-      files,
-      'picker',
-    )
+    // 统一走两层 handle：文件进文件层（本地 state）。
+    const handle = getTwoLayerHandle()
+    if (handle !== null) handle.handleFiles(files, 'picker')
   }
 
   return (
