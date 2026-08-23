@@ -22,7 +22,7 @@ import { filefixFilesDefinition, FilefixFilesNodeView, setFilefixNodeUpload } fr
 
 export const name = 'dsh-file-fix'
 
-export const inject = ['slots', 'remote', 'conversationEvents', 'modelDirectories']
+export const inject = ['slots', 'remote', 'conversationEvents', 'modelDirectories', 'sessions', 'conversation']
 
 export async function apply(ctx: ClientContext): Promise<void> {
   // 上传工具面：预检 + 字节上传 + 挂载，注入注入面（rail/picker/history 共享）。
@@ -116,6 +116,19 @@ export async function apply(ctx: ClientContext): Promise<void> {
       name: 'conversation.input.dock',
       id: 'filefix-two-layer',
       order: 1,
+      inject: (sessionId: string) => {
+        // 提供 per-session 的 SessionInput（含 pruneImages，用于无视觉模型时裁剪图像层）。
+        const actx = (ctx.get('sessions') as { scope: (id: string) => unknown } | undefined)?.scope(sessionId)
+        const conversation = actx !== undefined
+          ? (actx as unknown as { get: (key: string) => unknown }).get('conversation')
+          : undefined
+        const resolver = (conversation as { input?: { for: (a: unknown) => unknown } } | undefined)?.input
+        return {
+          sessionInput: resolver !== undefined && actx !== undefined
+            ? resolver.for(actx)
+            : undefined,
+        }
+      },
     }, TwoLayerRail)
     return () => { dispose() }
   })

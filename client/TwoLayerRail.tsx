@@ -16,6 +16,7 @@ import { humanSize } from './thumbnail.ts'
 import type { LoggerLike } from './upload-controller.ts'
 import { intakeFiles } from './upload-controller.ts'
 import { markLocalSessionNeedsVision } from './vision-context.ts'
+import { currentModelSupportsVision } from './ModelSelectWithVision.tsx'
 import { setTwoLayerHandle, setBridgeSessionId, getPageDrag, subscribePageDrag } from './two-layer-bridge.ts'
 import { getAttachmentBridge, subscribeAttachmentBridge } from './attachment-bridge.tsx'
 import * as s from './styles.ts'
@@ -58,6 +59,11 @@ const imageRemove: CSSProperties = { position: 'absolute', top: 4, right: 4, zIn
 export interface TwoLayerRailProps {
   /** 当前会话 id（session 标准 kit 提供）。 */
   sessionId: string
+  /** 当前会话的 SessionInput（含 pruneImages，用于无视觉模型时裁剪图像层）。 */
+  sessionInput?: {
+    state: { subscribe: (fn: () => void) => () => void; getSnapshot: () => { imageIds: readonly string[] } }
+    pruneImages: (ids: readonly string[]) => void
+  } | unknown
 }
 
 /** 是否拖拽（不检查 types：从外部窗口拖文件时 types 可能为空，但 dataTransfer 存在即可 drop）。 */
@@ -65,7 +71,7 @@ function hasFiles(e: ReactDragEvent): boolean {
   return e.dataTransfer !== null
 }
 
-export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | null {
+export function TwoLayerRail({ sessionId, sessionInput }: TwoLayerRailProps): ReactElement | null {
   const [items, setItems] = useState<UploadItem[]>([])
   const [imageDrop, setImageDrop] = useState(false)
   const [fileDrop, setFileDrop] = useState(false)
@@ -91,6 +97,25 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
     return subscribePageDrag(sync)
   }, [])
   useEffect(() => { setBridgeSessionId(sessionId) }, [sessionId])
+
+  // 视觉裁剪：当前模型不支持视觉 + 图像层有图片 → 自动清空图像层（发送时裁掉）。
+  useEffect(() => {
+    const input = sessionInput as {
+      state: { subscribe: (fn: () => void) => () => void; getSnapshot: () => { imageIds: readonly string[] } }
+      pruneImages: (ids: readonly string[]) => void
+    } | undefined
+    if (input === undefined || typeof input !== 'object' || input === null) return
+    // 订阅 input state（imageIds）变化。
+    return input.state.subscribe(() => {
+      const snapshot = input.state.getSnapshot()
+      const ids = snapshot.imageIds
+      if (ids.length === 0) return
+      // 当前模型不支持视觉 → 裁掉图像层（发送时不会带图片）。
+      if (!currentModelSupportsVision()) {
+        input.pruneImages([])
+      }
+    })
+  }, [sessionInput])
 
   // 注册 handle（controller 调用）。
   useEffect(() => {

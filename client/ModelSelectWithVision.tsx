@@ -110,6 +110,27 @@ function getModelNeedsVision(): boolean | null {
   return needsVisionValue
 }
 
+/** 查询：某个 provider/model 是否支持图片输入（TwoLayerRail 视觉裁剪用）。 */
+export function modelSupportsVision(provider: string | undefined, model: string | undefined): boolean {
+  if (provider === undefined || model === undefined) return true
+  return visionMapValue.get(provider + '/' + model) ?? false
+}
+
+/** 查询：当前 session 是否标记为需要视觉。 */
+export function sessionNeedsVision(): boolean | null {
+  return needsVisionValue
+}
+
+/** 模块级：当前选中的 provider/model（ModelSelectWithVision 渲染时更新）。 */
+let currentModelRef: { provider: string | undefined; model: string | undefined } = { provider: undefined, model: undefined }
+
+/** 供 TwoLayerRail 等查询：当前模型是否支持图片输入（默认 true——未知时不做裁剪）。 */
+export function currentModelSupportsVision(): boolean {
+  const { provider, model } = currentModelRef
+  if (provider === undefined || model === undefined) return true
+  return visionMapValue.get(provider + '/' + model) ?? false
+}
+
 export interface ModelSelectWithVisionProps {
   locked: boolean
   /** 当前会话 id（session 标准 kit 提供）。 */
@@ -274,6 +295,12 @@ export function ModelSelectWithVision({ locked, sessionId }: ModelSelectWithVisi
     }
     lastActionRef.current = 'select'
     if (directory !== undefined) void directory.select(selection).then(settleSelection)
+  }
+
+  // 更新模块级当前模型引用（视觉裁剪查询用）。
+  currentModelRef = {
+    provider: state.current?.provider,
+    model: state.current?.model,
   }
 
   const modelLabel = currentChoice?.model.name ?? T['trigger.fallback']
