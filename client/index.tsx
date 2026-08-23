@@ -8,9 +8,11 @@ import type { UploadLimits } from '../src/types.ts'
 import { UPLOAD_TYPERT_REMOTE, type UploadRemote } from './remote.ts'
 import { UploadPickerButton, setPickerShare } from './UploadPickerButton.tsx'
 import { TwoLayerRail, setTwoLayerShare } from './TwoLayerRail.tsx'
+import { AttachmentsBridge } from './attachment-bridge.tsx'
 import { ModelSelectWithVision, setModelNeedsVision, setModelSelectService, setModelVisionSupport } from './ModelSelectWithVision.tsx'
 import { ensureUploadStoreInstance, getUploadStoreActions } from './upload-store.ts'
 import { installTwoLayerController, setTwoLayerController } from './two-layer-controller.ts'
+import { getTwoLayerHandle } from './two-layer-bridge.ts'
 import { markLocalSessionNeedsVision } from './vision-context.ts'
 import { installVisionNavIcon } from './nav-icon.ts'
 import { installToolbarLayout } from './toolbar-layout.ts'
@@ -58,7 +60,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     getLimits: () => limitsBox.value,
     logger: ctx.logger,
     getSessionId: () => undefined,
-    onAddImages: () => {},
+    onAddImages: (files) => { getTwoLayerHandle()?.addImages(files) },
     canAcceptDrop: () => true,
     markVision: (sessionId: string) => { markLocalSessionNeedsVision(sessionId) },
   })
@@ -104,7 +106,17 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const dispose = ctx.slots.register({
       name: 'conversation.input.attachments',
       priority: -1,
-    }, TwoLayerRail as unknown as (props: unknown) => ReactElement | null)
+    }, AttachmentsBridge as unknown as (props: unknown) => ReactElement | null)
+    return () => { dispose() }
+  })
+
+  // 两层 UI（图像层 + 文件层）：注册在 conversation.input.dock（composer 内始终渲染）。
+  ctx.slots.inject('conversation.input.dock', () => {
+    const dispose = ctx.slots.register({
+      name: 'conversation.input.dock',
+      id: 'filefix-two-layer',
+      order: 1,
+    }, TwoLayerRail)
     return () => { dispose() }
   })
 

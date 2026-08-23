@@ -14,7 +14,18 @@ interface UploadStoreInstance {
   subscribe: (fn: () => void) => () => void
 }
 
-let instance: UploadStoreInstance | null = null
+/** 全局单例 key：确保所有模块（即使被 esbuild 拆成多份）共享同一实例。 */
+const GLOBAL_KEY = '__DSH_FILEFIX_STORE__'
+
+interface GlobalStoreHolder {
+  instance: UploadStoreInstance | null
+}
+
+function getHolder(): GlobalStoreHolder {
+  const g = (typeof window !== 'undefined' ? window : globalThis) as unknown as { [GLOBAL_KEY]?: GlobalStoreHolder }
+  g[GLOBAL_KEY] ??= { instance: null }
+  return g[GLOBAL_KEY]!
+}
 
 /** 把 engine create() 的产物规范化为最小实例面（绕过 bundler 解析的类型退化）。 */
 function normalize(created: unknown): UploadStoreInstance {
@@ -26,21 +37,28 @@ function normalize(created: unknown): UploadStoreInstance {
   return { actions: c.actions, getSnapshot: c.getSnapshot, subscribe: c.subscribe }
 }
 
+function getInstance(): UploadStoreInstance | null {
+  return getHolder().instance
+}
+function setInstance(value: UploadStoreInstance): void {
+  getHolder().instance = value
+}
+
 /** apply 时初始化（幂等）。 */
 export function ensureUploadStoreInstance(): void {
-  if (instance !== null) return
-  instance = normalize(createUploadStore().create())
+  if (getInstance() !== null) return
+  setInstance(normalize(createUploadStore().create()))
 }
 
 export function getUploadStoreActions(): BakedUploadActions {
-  if (instance === null) instance = normalize(createUploadStore().create())
-  return instance.actions
+  if (getInstance() === null) setInstance(normalize(createUploadStore().create()))
+  return getInstance()!.actions
 }
 
 export function getUploadStoreSnapshot(): UploadState {
-  return instance?.getSnapshot() ?? { items: [], notice: null }
+  return getInstance()?.getSnapshot() ?? { items: [], notice: null }
 }
 
 export function subscribeUploadStore(fn: () => void): () => void {
-  return instance?.subscribe(fn) ?? (() => {})
+  return getInstance()?.subscribe(fn) ?? (() => {})
 }
