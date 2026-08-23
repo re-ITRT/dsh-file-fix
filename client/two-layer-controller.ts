@@ -51,7 +51,9 @@ export function installTwoLayerController(): void {
     // 拦截 drop（阻止官方/浏览器默认），层内 React onDrop 负责处理。
     e.preventDefault()
     dragDepth = 0
-    setPageDrag(false)
+    // 延迟隐藏两层：等层内 React onDrop 处理完文件后再隐藏，
+    // 否则立即 setPageDrag(false) 会让无内容的层卸载，层内 onDrop 丢失文件。
+    setTimeout(() => setPageDrag(false), 0)
   }
 
   // paste：拦截官方 InputBar，交给 TwoLayerRail handle 分流。
