@@ -60,8 +60,9 @@ export interface TwoLayerRailProps {
   sessionId: string
 }
 
+/** 是否拖拽（不检查 types：从外部窗口拖文件时 types 可能为空，但 dataTransfer 存在即可 drop）。 */
 function hasFiles(e: ReactDragEvent): boolean {
-  return e.dataTransfer !== null && Array.from(e.dataTransfer.types).includes('Files')
+  return e.dataTransfer !== null
 }
 
 export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | null {
@@ -176,6 +177,7 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
         e.preventDefault()
         setActive(false)
         const files = Array.from(e.dataTransfer.files ?? [])
+        if (files.length === 0) return
         if (kind === 'image') dropToImageLayer(files)
         else dropToFiles(files)
       },
@@ -229,7 +231,7 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
           <div
             style={{ ...dropZone, ...(hasImage ? dropZoneFilled : {}), ...(imageDrop ? dropZoneActive : {}) }}
             data-filefix-image-drop
-            onDragOver={e => { if (hasFiles(e) || e.dataTransfer.getData('application/x-filefix-item') !== '') { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setImageDrop(true) } }}
+            onDragOver={e => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setImageDrop(true) } }}
             onDragLeave={() => setImageDrop(false)}
             onDrop={e => {
               const itemId = e.dataTransfer.getData('application/x-filefix-item')
@@ -237,7 +239,8 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
               if (!hasFiles(e)) return
               e.preventDefault()
               setImageDrop(false)
-              dropToImageLayer(Array.from(e.dataTransfer.files ?? []))
+              const files = Array.from(e.dataTransfer.files ?? [])
+              if (files.length > 0) dropToImageLayer(files)
             }}
           >
             {attachments.length === 0 && (
@@ -269,7 +272,8 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
               if (!hasFiles(e)) return
               e.preventDefault()
               setFileDrop(false)
-              dropToFiles(Array.from(e.dataTransfer.files ?? []))
+              const files = Array.from(e.dataTransfer.files ?? [])
+              if (files.length > 0) dropToFiles(files)
             }}
           >
             {items.length === 0 && (

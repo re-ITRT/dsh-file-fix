@@ -1,8 +1,9 @@
 /** 两层放置区控制器：document 级拖拽/粘贴拦截（插件 apply 时始终安装，独立于 slot 渲染）。
+ * - dragenter/dragover：不检查 dataTransfer.types（从外部窗口拖文件时 types 可能为空），
+ *   直接显示两层——让用户知道拖到哪层。
+ * - drop：capture 阶段 preventDefault（阻止官方/浏览器默认），由层内 React onDrop 处理。
  * - paste：拦截官方 InputBar（preventDefault + stopPropagation），交给 TwoLayerRail 的 handle
  *   （图片→图像层 addImages、文件→文件层 handleFiles）。
- * - drop：capture 阶段 preventDefault（阻止官方/浏览器默认），由层内 React onDrop 处理。
- * - dragenter：显示两层（让用户选择拖到哪层）。
  */
 
 import type { LoggerLike } from './upload-controller.ts'
@@ -45,29 +46,26 @@ export function installTwoLayerController(): void {
   if (installed || typeof document === 'undefined') return
   installed = true
 
-  const isFileDrag = (e: DragEvent): boolean =>
-    e.dataTransfer !== null && Array.from(e.dataTransfer.types).includes('Files')
-
   let dragDepth = 0
 
+  // 不检查 dataTransfer.types：从外部窗口拖文件时 types 可能为空，
+  // 但 dragenter 仍会触发。只要进入页面就显示两层。
   const onDragEnter = (e: DragEvent): void => {
-    if (!isFileDrag(e)) return
     dragDepth += 1
     setPageDrag(true)
   }
   const onDragOver = (e: DragEvent): void => {
-    if (!isFileDrag(e)) return
+    // 允许 drop（preventDefault）——dragover 的 dataTransfer.types 通常有 Files。
     e.preventDefault()
     if (e.dataTransfer !== null) e.dataTransfer.dropEffect = 'copy'
   }
   const onDragLeave = (e: DragEvent): void => {
-    if (!isFileDrag(e)) return
     dragDepth = Math.max(0, dragDepth - 1)
     if (dragDepth === 0) setPageDrag(false)
   }
   const onDrop = (e: DragEvent): void => {
-    // 拦截文件 drop（阻止官方/浏览器默认），层内 React onDrop 负责处理。
-    if (isFileDrag(e)) e.preventDefault()
+    // 拦截 drop（阻止官方/浏览器默认），层内 React onDrop 负责处理。
+    e.preventDefault()
     dragDepth = 0
     setPageDrag(false)
   }
