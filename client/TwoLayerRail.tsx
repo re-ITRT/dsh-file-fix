@@ -98,20 +98,27 @@ export function TwoLayerRail({ sessionId, sessionInput }: TwoLayerRailProps): Re
   }, [])
   useEffect(() => { setBridgeSessionId(sessionId) }, [sessionId])
 
-  // 视觉裁剪：当前模型不支持视觉 + 图像层有图片 → 自动清空图像层（发送时裁掉）。
+  // 视觉裁剪 + 发送后清空：
+  // - 当前模型不支持视觉 + 图像层有图片 → 自动清空图像层（发送时裁掉）。
+  // - 发送完成后（phase submitting → plain）→ 清空文件层（文件已注入）。
   useEffect(() => {
     const input = sessionInput as {
-      state: { subscribe: (fn: () => void) => () => void; getSnapshot: () => { imageIds: readonly string[] } }
+      state: { subscribe: (fn: () => void) => () => void; getSnapshot: () => { imageIds: readonly string[]; phase: string } }
       pruneImages: (ids: readonly string[]) => void
     } | undefined
     if (input === undefined || typeof input !== 'object' || input === null) return
-    // 订阅 input state（imageIds）变化。
+    let wasSubmitting = false
     return input.state.subscribe(() => {
       const snapshot = input.state.getSnapshot()
+      const phase = snapshot.phase
+      // 发送完成后清空文件层。
+      if (wasSubmitting && phase === 'plain') {
+        setItems([])
+      }
+      wasSubmitting = phase === 'submitting' || phase === 'claimed'
+      // 视觉裁剪：无视觉模型 + 图像层有图片 → 裁掉。
       const ids = snapshot.imageIds
-      if (ids.length === 0) return
-      // 当前模型不支持视觉 → 裁掉图像层（发送时不会带图片）。
-      if (!currentModelSupportsVision()) {
+      if (ids.length > 0 && !currentModelSupportsVision()) {
         input.pruneImages([])
       }
     })
