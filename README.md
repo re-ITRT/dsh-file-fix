@@ -68,7 +68,7 @@ DeepSeek Harness（DSH）上传体验优化插件：**统一文件导入体系**
 ## 安装（推荐：npm 官方渠道）
 
 ```bash
-dsh plugin --profile web add dsh-file-fix@^0.1.1
+dsh plugin --profile web add dsh-file-fix
 ```
 
 装完重启 `dsh web` 即生效（输入框出现「上传文件」按钮）。
@@ -77,9 +77,9 @@ dsh plugin --profile web add dsh-file-fix@^0.1.1
 
 | 操作 | 命令 | 结果 |
 | --- | --- | --- |
-| 全新安装 | `dsh plugin --profile web add dsh-file-fix@^0.1.1` | 依赖 + 自动登记 bundles（插件树加载）✅ |
+| 全新安装 | `dsh plugin --profile web add dsh-file-fix` | 依赖 + 自动登记 bundles（插件树加载）✅ |
 | 卸载 | `dsh plugin --profile web remove dsh-file-fix` | 依赖 + bundles 登记自动移除 ✅ |
-| 重装 | 同安装命令 | 全部恢复 ✅ |
+| 重装 | `dsh plugin --profile web add dsh-file-fix` | 全部恢复 ✅ |
 
 > **注意**：pnpm 10+ 首次 add 可能报 `[ERR_PNPM_IGNORED_BUILDS]`（dsh 官方依赖的原生模块构建被拦截，任何插件都如此）——此时**再跑一次 add** 即可（allowBuilds 已登记后 pnpm 干净退出，dsh 完成登记）。
 
