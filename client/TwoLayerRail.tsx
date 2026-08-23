@@ -196,8 +196,8 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
     e.dataTransfer.effectAllowed = 'move'
     setDragKind('file')
   }
-  const onImageItemDragStart = (e: ReactDragEvent): void => {
-    e.dataTransfer.setData('application/x-filefix-image', '1')
+  const onImageItemDragStart = (e: ReactDragEvent, attachmentId: string): void => {
+    e.dataTransfer.setData('application/x-filefix-image', attachmentId)
     e.dataTransfer.effectAllowed = 'move'
     setDragKind('image')
   }
@@ -247,7 +247,7 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
               <div style={dropPlaceholder}><span style={dropIcon}>{'🖼'}</span><span>{'拖图片到这里，直接加入模型上下文'}</span></div>
             )}
             {attachments.map(attachment => (
-              <div key={attachment.id} style={{ ...imageItem, ...(dragKind === 'image' ? imageItemDragging : {}) }} draggable onDragStart={onImageItemDragStart}>
+              <div key={attachment.id} style={{ ...imageItem, ...(dragKind === 'image' ? imageItemDragging : {}) }} draggable onDragStart={e => onImageItemDragStart(e, String(attachment.id))}>
                 <div style={imageThumb}><img style={imageThumbImg} src={attachment.previewUrl} alt={attachment.file.name} /></div>
                 <button type="button" style={imageRemove} aria-label={'移除 ' + attachment.file.name} onClick={() => bridge?.onRemoveImage(attachment.id)}>×</button>
               </div>
@@ -269,6 +269,19 @@ export function TwoLayerRail({ sessionId }: TwoLayerRailProps): ReactElement | n
             onDragOver={e => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setFileDrop(true) } }}
             onDragLeave={() => setFileDrop(false)}
             onDrop={e => {
+              // 图像层拖来的图片 → 进文件层（插件上传）+ 从图像层移除。
+              const imageFlag = e.dataTransfer.getData('application/x-filefix-image')
+              if (imageFlag !== '') {
+                e.preventDefault()
+                setFileDrop(false)
+                const attachment = attachments.find(a => String(a.id) === imageFlag) ?? attachments[0]
+                if (attachment !== undefined) {
+                  intakeIntoLayer([attachment.file], 'layer-reorder')
+                  bridge?.onRemoveImage(attachment.id)
+                  setDragKind(null)
+                }
+                return
+              }
               if (!hasFiles(e)) return
               e.preventDefault()
               setFileDrop(false)
