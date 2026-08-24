@@ -15,7 +15,7 @@ import type { UploadItem } from './store.ts'
 import { humanSize } from './thumbnail.ts'
 import type { LoggerLike } from './upload-controller.ts'
 import { intakeFiles } from './upload-controller.ts'
-import { markLocalSessionNeedsVision } from './vision-context.ts'
+import { markLocalSessionNeedsVision, clearLocalSessionNeedsVision, fetchSessionNeedsVision } from './vision-context.ts'
 import { currentModelSupportsVision } from './ModelSelectWithVision.tsx'
 import { setTwoLayerHandle, setBridgeSessionId, getPageDrag, subscribePageDrag } from './two-layer-bridge.ts'
 import { getAttachmentBridge, subscribeAttachmentBridge } from './attachment-bridge.tsx'
@@ -248,7 +248,32 @@ export function TwoLayerRail({ sessionId, sessionInput }: TwoLayerRailProps): Re
   }
   const removeFile = (item: UploadItem): void => {
     setItems(prev => prev.filter(i => i.id !== item.id))
+    // 已上传完成（有 attachmentId）的文件：撤销 pending 挂载，避免删除后仍注入。
+    // Bug 2：删除列表项后，下次发送不应再注入该文件。
+    if (item.status === 'done' && item.attachmentId !== undefined && upload !== undefined) {
+      void upload.unmarkPending({ sessionId, attachmentId: item.attachmentId }).catch(() => {})
+    }
+    // 删除图片后重新判定视觉需求（Bug 3）。
+    if (item.mediaType.startsWith('image/')) {
+      reconcileVisionNeeds(sessionId, item)
+    }
     logger?.info('[dsh-file-fix] chip removed %s', item.name)
+  }
+
+  /**
+   * 删除图片后重判本 session 是否仍需要视觉（Bug 3）：
+   * 视觉需求 = 图像层（官方 draft images）有图 OR 文件层还有未删除的图片。
+   * 两层都空了 → 清除本地标记，并重新向 host 查询「已注入历史」的判定。
+   * @param removedItem 正在从文件层删除的文件（排除它，因为 setItems 尚未生效）。
+   * @param removedAttachmentId 正在从图像层删除的 attachmentId（排除它，因为 attachments 尚未更新）。
+   */
+  const reconcileVisionNeeds = (sid: string, removedItem?: UploadItem, removedAttachmentId?: string): void => {
+    const imageLayerHas = attachments.some(a => String(a.id) !== removedAttachmentId)
+    const fileLayerHas = items.some(i => i.mediaType.startsWith('image/') && i.id !== removedItem?.id)
+    if (imageLayerHas || fileLayerHas) return
+    // 当前列表已无图片：清本地缓存 + 重新查询 host（可能仍有历史注入）。
+    clearLocalSessionNeedsVision(sid)
+    if (upload !== undefined) void fetchSessionNeedsVision(upload, sid)
   }
 
   return (
@@ -281,7 +306,10 @@ export function TwoLayerRail({ sessionId, sessionInput }: TwoLayerRailProps): Re
             {attachments.map(attachment => (
               <div key={attachment.id} style={{ ...imageItem, ...(dragKind === 'image' ? imageItemDragging : {}) }} draggable onDragStart={e => onImageItemDragStart(e, String(attachment.id))}>
                 <div style={imageThumb}><img style={imageThumbImg} src={attachment.previewUrl} alt={attachment.file.name} /></div>
-                <button type="button" style={imageRemove} aria-label={'移除 ' + attachment.file.name} onClick={() => bridge?.onRemoveImage(attachment.id)}>×</button>
+                <button type="button" style={imageRemove} aria-label={'移除 ' + attachment.file.name} onClick={() => {
+                  bridge?.onRemoveImage(attachment.id)
+                  reconcileVisionNeeds(sessionId, undefined, String(attachment.id))
+                }}>×</button>
               </div>
             ))}
           </div>

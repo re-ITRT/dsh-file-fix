@@ -36,6 +36,15 @@ export function markLocalSessionNeedsVision(sessionId: string): void {
   visionBySession.set(sessionId, true)
 }
 
+/**
+ * 本地清除一个 session 的视觉需求标记（删除图片后调用）。
+ * 删除缓存与 inflight，使下一次读取重新走 RPC（host 端会按当前上下文重判）。
+ */
+export function clearLocalSessionNeedsVision(sessionId: string): void {
+  visionBySession.delete(sessionId)
+  inflight.delete(sessionId)
+}
+
 /** 读取缓存（不同步 RPC）。 */
 export function cachedSessionNeedsVision(sessionId: string): boolean | null {
   return visionBySession.get(sessionId) ?? null

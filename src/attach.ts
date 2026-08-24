@@ -119,7 +119,7 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
     }
   }
 
-  // 事件待落盘标记：pre-step 已注入的会话，等 user/message 落盘后补 uploadux/files 事件。
+  // 事件待落盘标记：pre-step 已注入的会话，等 user/message 落盘后补 filefix/files 事件。
   const eventDue = new Set<string>()
 
   root.on('session/event', (session: Session, event: SessionEvent) => {
@@ -134,39 +134,19 @@ export function installAttachmentBridge(ctx: Context, service: UploadService): v
       // sessionId 一并落盘（清洁：GC 会话级联需要知道记录属于哪个会话）。
       void service.store.saveAssociation(messageId, sessionId, event.seq, entry.files)
       const data: FilesAttachedEventData = { messageId, files: entry.files }
-      // 监听器运行在 user/message 的 append 发布边界内：直接 append 会撞 reentrancy
-      // 守卫；且 store 级 append 要求 seq 严格衔接已存日志 cursor。agent 会继续追加
-      // 事件抢占 seq，所以带重试：等 drain 追平后按当前 live seq 落盘。
+      // 监听器运行在 user/message 的 append 发布边界内：直接 session.append 会撞
+      // reentrancy 守卫。延迟到下一 tick，用 Session.append 走官方持久化管线——
+      // seq 由 DSH 自动分配（log.length），绝不产生 seq 冲突/日志损坏（Bug 1）。
       queueMicrotask(() => {
-        void appendWithRetry(session, data, messageId)
+        try {
+          session.append(FILES_ATTACHED_EVENT, data)
+        } catch (error) {
+          // 自定义事件类型不满足 surface 校验时降级：仅保留关联记录（气泡可从 RPC 重建）。
+          ctx.logger.warn('[dsh-file-fix] filefix/files append rejected (fallback to association only): %o', error)
+        }
       })
     }
   })
-
-  /** 重试落盘：seq 与 drain cursor 存在竞态，等追平后按当前 live seq 写入。 */
-  async function appendWithRetry(
-    session: Session,
-    data: FilesAttachedEventData,
-    messageId: string,
-  ): Promise<void> {
-    for (let attempt = 0; attempt < 150; attempt++) {
-      try {
-        await persistence.append(session.id, [{
-          type: FILES_ATTACHED_EVENT,
-          seq: session.seq,
-          time: Date.now(),
-          data,
-          ignorable: true,
-        } as SessionEvent])
-        return
-      } catch (error) {
-        if (attempt === 149) {
-          return
-        }
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-    }
-  }
 
   ctx.on('agent/pre-step', async ({ agent, messages }, next) => {
     const decision = await next()
